@@ -38,7 +38,7 @@ def episode(world, e):
     run = []
     r, s_, _ = world.step([0.,0.])
     while True:
-
+        t = world.num_steps
         # run.append([pendulum.t] + pendulum.get_state())
         if e % config['_f'] == 0:
             a = model.fwp_actor_(s_)
@@ -52,7 +52,7 @@ def episode(world, e):
 
         r, s, end = world.step(a[0])
 
-        if end:
+        if end or t > 2000:
             holder = Holder(s_.flatten(), a.flatten(), False)
             holder.complete(r, s.flatten())
             model.R_add(holder)
@@ -75,7 +75,7 @@ def episode(world, e):
 
     # save(e, pendulum.t, score)
     world.reset()
-    return score, 0.
+    return score, t
 
 import time as TIME
 start_time = TIME.time()

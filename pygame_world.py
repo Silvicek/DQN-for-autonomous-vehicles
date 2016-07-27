@@ -12,11 +12,11 @@ import os, sys
 
 # set SDL to use the dummy NULL video driver,
 #   so it doesn't need a windowing system.
-# os.environ["SDL_VIDEODRIVER"] = "dummy"
+os.environ["SDL_VIDEODRIVER"] = "dummy"
 show_sensors = False
-show_sensors = True
+# show_sensors = True
 draw_screen = False
-draw_screen = True
+# draw_screen = True
 # PyGame init
 width = 1000
 height = 700
@@ -29,9 +29,14 @@ screen.set_alpha(None)
 
 # Showing sensors and redrawing slows things down.
 
+CT_TARGET = 3
+CT_STATIC = 1
+CT_CAR = 0
+
 
 class Shape:
-    def __init__(self, space, r=30, x=50, y=height - 100, angle=0.5, color='orange', static=True):
+    def __init__(self, space, r=30, x=50, y=height - 100, angle=0.5, color='orange',
+                 static=True, collision_type=CT_STATIC):
         self.r = r
         if static:
             self.body = pymunk.Body(pymunk.inf, pymunk.inf)
@@ -42,7 +47,9 @@ class Shape:
         self.shape.color = THECOLORS[color]
         self.shape.elasticity = 1.0
         self.shape.angle = angle
+        self.shape.collision_type = collision_type
         space.add(self.body, self.shape)
+
 
 
 class World:
@@ -53,13 +60,17 @@ class World:
         # Physics stuff.
         self.space = pymunk.Space()
         self.space.gravity = pymunk.Vec2d(0., 0.)
+        self.space.add_collision_handler(CT_CAR, CT_STATIC, self._crash_handler)
 
         # Create the car.
-        self.car = Shape(self.space, r=30, x=100, y=100, color='green', static=False)
+        self.car = Shape(self.space, r=30, x=100, y=100, color='green', static=False,
+                         collision_type=CT_CAR)
         self.dynamic = [Shape(self.space, r=30, x=200, y=200, color='orange', static=False)]
 
         # Record steps.
         self.num_steps = 0
+
+        self.last_step = self.car.body.position
 
         # Create walls.
         static = [
@@ -90,7 +101,12 @@ class World:
         self.obstacles.append(Shape(self.space, r=55, x=250, y=550, color='purple'))
         self.obstacles.append(Shape(self.space, r=65, x=500, y=150, color='purple'))
 
-        self.target = Shape(self.space, r=10, x=600, y=60, color='red')
+        self.target = Shape(self.space, r=10, x=600, y=60, color='red', collision_type=CT_TARGET)
+
+    def _crash_handler(self, space, arbiter):
+        print 'CRASH HANDLED'
+        self.crashed = True
+        return False
 
     def step(self, action):
         go = action[0]
@@ -117,26 +133,33 @@ class World:
         x, y = self.car.body.position
         readings = self._get_sonar_readings(x, y, self.car.body.angle)
         state = np.array([readings])
-        if 1 in readings:  # crashed
-            self.crashed = True
-            print 'T=', self.num_steps
+        if self.crashed:
             if self.num_steps == 0:
                 self.reset()
                 return self.step(action)
         self.num_steps += 1
 
-        return self.get_reward(), state, self.crashed
+        r = self.get_reward(action)
 
-    def get_reward(self):
+        self.last_step = self.car.body.position
+
+        return r, state, self.crashed
+
+    def get_reward(self, action):
         max_dist = np.linalg.norm([width, height])
         dist = np.linalg.norm(self.target.body.position - self.car.body.position)
         if self.crashed:
-            if dist <= self.car.r + self.target.r:
-                r = +3.
-            else:
-                r = -1.
+            # if dist <= self.car.r + self.target.r:
+            #     r = +3.
+            # else:
+            r = -1.
         else:
-            r = ((max_dist - dist)/max_dist)**2
+            # dist_last = np.linalg.norm(self.target.body.position - self.last_step)
+            # # r = ((max_dist - dist)/max_dist)**2
+            # r = dist_last - dist
+            # print dist_last, dist, r
+            r = action[0]/10.
+
         return r
 
     def _move_dynamic(self):
