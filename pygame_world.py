@@ -132,9 +132,9 @@ class World:
         dist = np.linalg.norm(self.target.body.position - self.car.body.position)
         if self.crashed:
             if dist <= self.car.r + self.target.r:
-                r = +3
+                r = +3.
             else:
-                r = -1
+                r = -1.
         else:
             r = ((max_dist - dist)/max_dist)**2
         return r
