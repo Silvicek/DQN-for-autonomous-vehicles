@@ -167,8 +167,8 @@ if __name__ == '__main__':
         # ===================== change training parameters here
         model = DDPG(dt=1e-2,
                      batch_size=64,
-                     hidden_a=[20,20],
-                     hidden_c=[50,50],
+                     hidden_a=[100,100],
+                     hidden_c=[200,200],
                      consts=consts,
                      s_dim=3,
                      a_dim=2,

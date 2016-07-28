@@ -13,18 +13,9 @@ import os, sys
 # set SDL to use the dummy NULL video driver,
 #   so it doesn't need a windowing system.
 
-# PyGame init
+
 width = 1000
 height = 700
-pygame.init()
-screen = pygame.display.set_mode((width, height))
-clock = pygame.time.Clock()
-
-# Turn off alpha since we don't use it.
-screen.set_alpha(None)
-
-# Showing sensors and redrawing slows things down.
-
 CT_TARGET = 3
 CT_STATIC = 1
 CT_CAR = 0
@@ -58,6 +49,15 @@ class World:
             os.environ["SDL_VIDEODRIVER"] = "dummy"
             show_sensors = False
             draw_screen = False
+
+        # PyGame init
+
+        pygame.init()
+        self.screen = pygame.display.set_mode((width, height))
+        self.clock = pygame.time.Clock()
+
+        # Turn off alpha since we don't use it.
+        self.screen.set_alpha(None)
 
         # Global-ish.
         self.crashed = False
@@ -127,11 +127,11 @@ class World:
 
         # Update the screen and stuff.
         self.space.step(1./10)
-        screen.fill(THECOLORS["black"])
-        draw(screen, self.space)
+        self.screen.fill(THECOLORS["black"])
+        draw(self.screen, self.space)
         if draw_screen:
             pygame.display.flip()
-        clock.tick()
+        self.clock.tick()
 
         # Get the current location and the readings there.
         x, y = self.car.body.position
@@ -162,7 +162,7 @@ class World:
             # # r = ((max_dist - dist)/max_dist)**2
             # r = dist_last - dist
             # print dist_last, dist, r
-            r = action[0]/100.
+            r = (action[0]-abs(action[1]))/100.
 
         return r
 
@@ -225,12 +225,12 @@ class World:
                     or rotated_p[0] >= width or rotated_p[1] >= height:
                 return i  # Sensor is off the screen.
             else:
-                obs = screen.get_at(rotated_p)
+                obs = self.screen.get_at(rotated_p)
                 if self._is_empty(obs) != 0:
                     return i
 
             if show_sensors:
-                pygame.draw.circle(screen, (255, 255, 255), (rotated_p), 2)
+                pygame.draw.circle(self.screen, (255, 255, 255), (rotated_p), 2)
 
         # Return the distance for the arm.
         return i
