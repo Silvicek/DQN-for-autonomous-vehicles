@@ -12,11 +12,7 @@ import os, sys
 
 # set SDL to use the dummy NULL video driver,
 #   so it doesn't need a windowing system.
-os.environ["SDL_VIDEODRIVER"] = "dummy"
-show_sensors = False
-# show_sensors = True
-draw_screen = False
-# draw_screen = True
+
 # PyGame init
 width = 1000
 height = 700
@@ -53,7 +49,16 @@ class Shape:
 
 
 class World:
-    def __init__(self):
+    def __init__(self, visualize=False):
+        global show_sensors, draw_screen
+        if visualize:
+            show_sensors = True
+            draw_screen = True
+        else:
+            os.environ["SDL_VIDEODRIVER"] = "dummy"
+            show_sensors = False
+            draw_screen = False
+
         # Global-ish.
         self.crashed = False
 
@@ -97,14 +102,13 @@ class World:
         # Create some obstacles, semi-randomly.
         # We'll create three and they'll move around to prevent over-fitting.
         self.obstacles = []
-        self.obstacles.append(Shape(self.space, r=35, x=25, y=350, color='purple'))
-        self.obstacles.append(Shape(self.space, r=55, x=250, y=550, color='purple'))
-        self.obstacles.append(Shape(self.space, r=65, x=500, y=150, color='purple'))
+        self.obstacles.append(Shape(self.space, r=55, x=25, y=350, color='purple'))
+        self.obstacles.append(Shape(self.space, r=95, x=250, y=550, color='purple'))
+        self.obstacles.append(Shape(self.space, r=155, x=500, y=150, color='purple'))
 
         self.target = Shape(self.space, r=10, x=600, y=60, color='red', collision_type=CT_TARGET)
 
     def _crash_handler(self, space, arbiter):
-        print 'CRASH HANDLED'
         self.crashed = True
         return False
 
@@ -158,7 +162,7 @@ class World:
             # # r = ((max_dist - dist)/max_dist)**2
             # r = dist_last - dist
             # print dist_last, dist, r
-            r = action[0]/10.
+            r = action[0]/100.
 
         return r
 
@@ -260,6 +264,13 @@ class World:
             return 1
 
 if __name__ == "__main__":
+    # os.environ["SDL_VIDEODRIVER"] = "dummy"
+    # show_sensors = False
+    # draw_screen = False
+
+    show_sensors = True
+    draw_screen = True
+
     game_state = World()
     import time
     start = time.time()

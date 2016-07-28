@@ -75,6 +75,7 @@ def episode(world, e):
 
     # save(e, pendulum.t, score)
     world.reset()
+    save(e, t, score)
     return score, t
 
 import time as TIME
@@ -87,7 +88,6 @@ def train(world):
     for e in range(episodes):
         score, time = episode(world, e)
 
-
         if e % config['_f'] == 0:
             t_.append(model.time_steps)
             r_.append(score)
@@ -97,6 +97,14 @@ def train(world):
         print e, '...', 'score =', score, ', time =', time
 
         model.noise.reset()
+        print 'max=', max([np.max(np.abs(par.eval())) for par in model.actor.nn.params])
+
+
+def play(world):
+    while True:
+        score, time = episode(world, 50)
+        print 'score =', score, ', time =', time
+
         print 'max=', max([np.max(np.abs(par.eval())) for par in model.actor.nn.params])
 
 
@@ -155,6 +163,7 @@ if __name__ == '__main__':
     create_dirs()
 
     if not config['v']:
+
         # ===================== change training parameters here
         model = DDPG(dt=1e-2,
                      batch_size=64,
@@ -174,13 +183,6 @@ if __name__ == '__main__':
         if config.get('path'):
             path = config['path']
         model = load_ddpg(path)
-        control = model.fwp_actor_
-        # control = model.stoch_action_
-        pendulum = InvertedPendulum(init_conds[:2], init_conds[2:], end=20.)
-        data = pendulum.integrate(control)
-        t = data[:,0]
-        x = data[:,1]
-        theta = data[:,3]
-        xx = np.vstack((x,theta)).T
-        path = config['dir']+'/'+config['task']+'/'+config['id']+'/videos/bestval.mp4'
-        animate_pendulum(t, xx, filename=path)
+        world = World(visualize=True)
+        play(world)
+
