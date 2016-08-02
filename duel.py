@@ -67,8 +67,8 @@ parser.add_argument('--mode', choices=['train', 'play'], default='train')
 parser.add_argument('--load_path')
 
 # parser.add_argument('--environment', type=str, default='CartPole-v0')
-parser.add_argument('--environment', type=str, default='ACar-v0')
-# parser.add_argument('environment')
+# parser.add_argument('--environment', type=str, default='ACar-v0')
+parser.add_argument('environment')
 
 args = parser.parse_args()
 
