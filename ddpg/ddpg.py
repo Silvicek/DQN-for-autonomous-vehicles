@@ -78,8 +78,8 @@ class DDPG:
         self.batch_size = batch_size
         self.alpha, self.beta, self.gamma, self.tau = consts
         self.R_size = int(replay_size)
-        self.start_step_critic = 10000
-        self.start_step_actor = 30000
+        self.start_step_critic = 1000
+        self.start_step_actor = 3000
         self.dt = dt
         self.noise_info = (noise_theta, noise_sigma, noise_T)
         # ======= training info for saving

@@ -6,6 +6,7 @@ from keras.layers import Input, Dense, Lambda
 from keras.layers.normalization import BatchNormalization
 from keras import initializations
 from keras import backend as K
+import pickle
 import numpy as np
 
 
@@ -60,8 +61,13 @@ parser.add_argument('--update_frequency', type=int, default=4)
 parser.add_argument('--target_net_update_frequency', type=int, default=32)
 parser.add_argument('--replay_memory_size', type=int, default=100000)
 
-parser.add_argument('--environment', type=str, default='CartPole-v0')
-# parser.add_argument('--environment', type=str, default='ACar-v0')
+parser.add_argument('--save_frequency', type=int, default=100)
+parser.add_argument('--save_path', type=str, default='models')
+parser.add_argument('--mode', choices=['train', 'play'], default='train')
+parser.add_argument('--load_path')
+
+# parser.add_argument('--environment', type=str, default='CartPole-v0')
+parser.add_argument('--environment', type=str, default='ACar-v0')
 # parser.add_argument('environment')
 
 args = parser.parse_args()
@@ -82,96 +88,157 @@ x, z = createLayers()
 target_model = Model(input=x, output=z)
 target_model.set_weights(model.get_weights())
 
-prestates = []
-actions = []
-rewards = []
-poststates = []
-terminals = []
+def update_exploration(e):
+    return e
 
-total_reward = 0
-timestep = 0
+def train():
+    prestates = []
+    actions = []
+    rewards = []
+    poststates = []
+    terminals = []
 
-for i_episode in range(args.episodes):
-    observation = env.reset()
-    episode_reward = 0
-    for t in range(args.max_timesteps):
-        if args.display:
-            env.render()
+    total_reward = 0
+    timestep = 0
+    epsilon = 1.
 
-        if timestep < args.replay_start_size or np.random.random() < args.exploration:
-            action = env.action_space.sample()
-            if args.verbose > 0:
-                print("e:", i_episode, "e.t:", t, "action:", action, "random")
-        else:
+    best_reward = -999.  # TODO: save THE BEST THE BEST THE BEST THE BEST
+
+    for i_episode in range(args.episodes):
+        observation = env.reset()
+        episode_reward = 0
+        for t in range(args.max_timesteps):
+            epsilon = update_exploration(epsilon)
+            if args.display:
+                env.render()
+
+            if i_episode % args.save_frequency != 0 and \
+               (timestep < args.replay_start_size or np.random.random() < epsilon):
+                action = env.action_space.sample()
+                if args.verbose > 0:
+                    print("e:", i_episode, "e.t:", t, "action:", action, "random")
+            else:
+                s = np.array([observation])
+                q = model.predict(s, batch_size=1)
+                action = np.argmax(q[0])
+                if args.verbose > 0:
+                    print("e:", i_episode, "e.t:", t, "action:", action, "q:", q)
+
+            if len(prestates) >= args.replay_memory_size:
+                delidx = np.random.randint(0, len(prestates) - 1 - args.batch_size)
+                del prestates[delidx]
+                del actions[delidx]
+                del rewards[delidx]
+                del poststates[delidx]
+                del terminals[delidx]
+
+            prestates.append(observation)
+            actions.append(action)
+
+            observation, reward, done, info = env.step(action)
+            episode_reward += reward
+            if args.verbose > 1:
+                print("reward:", reward)
+
+            rewards.append(reward)
+            poststates.append(observation)
+            terminals.append(done)
+
+            timestep += 1
+
+            if timestep > args.replay_start_size:
+                if timestep % args.update_frequency == 0:
+                    for k in xrange(args.train_repeat):
+                        if len(prestates) > args.batch_size:
+                            # indexes = range(args.batch_size)
+                            # indexes = np.random.choice(len(prestates), size=args.batch_size)
+                            indexes = np.random.randint(len(prestates), size=args.batch_size)
+                        else:
+                            indexes = range(len(prestates))
+
+                        pre_sample = np.array([prestates[i] for i in indexes])
+                        post_sample = np.array([poststates[i] for i in indexes])
+                        qpre = model.predict(pre_sample)
+                        qpost = target_model.predict(post_sample)
+                        for i in xrange(len(indexes)):
+                            if terminals[indexes[i]]:
+                                qpre[i, actions[indexes[i]]] = rewards[indexes[i]]
+                            else:
+                                qpre[i, actions[indexes[i]]] = rewards[indexes[i]] + args.gamma * np.amax(qpost[i])
+                        model.train_on_batch(pre_sample, qpre)
+
+                if timestep % args.target_net_update_frequency == 0:
+                    if args.verbose > 0:
+                        print('timestep:', timestep, 'DDQN: Updating weights')
+                    weights = model.get_weights()
+                    target_model.set_weights(weights)
+                        # weights = model.get_weights()
+                        # target_weights = target_model.get_weights()
+                        # for i in xrange(len(weights)):
+                        #     weights[i] *= args.tau
+                        #     target_weights[i] *= (1 - args.tau)
+                        #     target_weights[i] += weights[i]
+                        # target_model.set_weights(target_weights)
+
+            if done:
+                break
+
+        if i_episode % args.save_frequency == 0:
+            weights = target_model.get_weights()
+            file_name = args.environment+'_'+str(i_episode)+str('_%.2f' % episode_reward)+'.mdl'
+            f = open(args.save_path+'/'+file_name, 'w')
+            pickle.dump(weights, f)
+            f.close()
+
+        print("Episode {} finished after {} timesteps, episode reward {}".format(i_episode + 1, t + 1, episode_reward))
+        total_reward += episode_reward
+
+    print("Average reward per episode {}".format(total_reward / args.episodes))
+
+    if args.gym_record:
+        env.monitor.close()
+
+
+def play():
+    f = open(args.load_path, 'r')
+    weights = pickle.load(f)
+    target_model.set_weights(weights)
+    f.close()
+    total_reward = 0
+    timestep = 0
+
+    for i_episode in range(args.episodes):
+        observation = env.reset()
+        episode_reward = 0
+        for t in range(args.max_timesteps):
+            if args.display:
+                env.render()
+
             s = np.array([observation])
-            q = model.predict(s, batch_size=1)
+            q = target_model.predict(s, batch_size=1)
             action = np.argmax(q[0])
             if args.verbose > 0:
                 print("e:", i_episode, "e.t:", t, "action:", action, "q:", q)
 
-        if len(prestates) >= args.replay_memory_size:
-            delidx = np.random.randint(0, len(prestates) - 1 - args.batch_size)
-            del prestates[delidx]
-            del actions[delidx]
-            del rewards[delidx]
-            del poststates[delidx]
-            del terminals[delidx]
+            observation, reward, done, info = env.step(action)
+            episode_reward += reward
+            if args.verbose > 1:
+                print("reward:", reward)
 
-        prestates.append(observation)
-        actions.append(action)
+            timestep += 1
 
-        observation, reward, done, info = env.step(action)
-        episode_reward += reward
-        if args.verbose > 1:
-            print("reward:", reward)
+            if done:
+                break
 
-        rewards.append(reward)
-        poststates.append(observation)
-        terminals.append(done)
+        print("Episode {} finished after {} timesteps, episode reward {}".format(i_episode + 1, t + 1, episode_reward))
+        total_reward += episode_reward
 
-        timestep += 1
+    print("Average reward per episode {}".format(total_reward / args.episodes))
 
-        if timestep > args.replay_start_size:
-            if timestep % args.update_frequency == 0:
-                for k in xrange(args.train_repeat):
-                    if len(prestates) > args.batch_size:
-                        # indexes = range(args.batch_size)
-                        # indexes = np.random.choice(len(prestates), size=args.batch_size)
-                        indexes = np.random.randint(len(prestates), size=args.batch_size)
-                    else:
-                        indexes = range(len(prestates))
+    if args.gym_record:
+        env.monitor.close()
 
-                    pre_sample = np.array([prestates[i] for i in indexes])
-                    post_sample = np.array([poststates[i] for i in indexes])
-                    qpre = model.predict(pre_sample)
-                    qpost = target_model.predict(post_sample)
-                    for i in xrange(len(indexes)):
-                        if terminals[indexes[i]]:
-                            qpre[i, actions[indexes[i]]] = rewards[indexes[i]]
-                        else:
-                            qpre[i, actions[indexes[i]]] = rewards[indexes[i]] + args.gamma * np.amax(qpost[i])
-                    model.train_on_batch(pre_sample, qpre)
 
-            if timestep % args.target_net_update_frequency == 0:
-                if args.verbose > 0:
-                    print('timestep:', timestep, 'DDQN: Updating weights')
-                weights = model.get_weights()
-                target_model.set_weights(weights)
-                    # weights = model.get_weights()
-                    # target_weights = target_model.get_weights()
-                    # for i in xrange(len(weights)):
-                    #     weights[i] *= args.tau
-                    #     target_weights[i] *= (1 - args.tau)
-                    #     target_weights[i] += weights[i]
-                    # target_model.set_weights(target_weights)
+if __name__ == '__main__':
+    eval(args.mode+'()')
 
-        if done:
-            break
-
-    print("Episode {} finished after {} timesteps, episode reward {}".format(i_episode + 1, t + 1, episode_reward))
-    total_reward += episode_reward
-
-print("Average reward per episode {}".format(total_reward / args.episodes))
-
-if args.gym_record:
-    env.monitor.close()

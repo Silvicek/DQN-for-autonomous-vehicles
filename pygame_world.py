@@ -271,7 +271,7 @@ if __name__ == "__main__":
     show_sensors = True
     draw_screen = True
 
-    game_state = World()
+    game_state = World(True)
     import time
     start = time.time()
 

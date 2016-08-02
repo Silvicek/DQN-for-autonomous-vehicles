@@ -53,7 +53,7 @@ def episode(world, e):
         r, s, end = world.step(a[0])
 
         if end or t > 2000:
-            holder = Holder(s_.flatten(), a.flatten(), False)
+            holder = Holder(s_.flatten(), a.flatten(), True)
             holder.complete(r, s.flatten())
             model.R_add(holder)
             break
