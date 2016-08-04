@@ -73,6 +73,7 @@ parser.add_argument('environment')
 args = parser.parse_args()
 
 env = gym.make(args.environment)
+env.configure(args.mode)
 assert isinstance(env.observation_space, Box)
 assert isinstance(env.action_space, Discrete)
 
@@ -88,8 +89,10 @@ x, z = createLayers()
 target_model = Model(input=x, output=z)
 target_model.set_weights(model.get_weights())
 
-def update_exploration(e):
+
+def update_exploration(e):  # TODO: dynamic change
     return e
+
 
 def train():
     prestates = []
@@ -100,7 +103,8 @@ def train():
 
     total_reward = 0
     timestep = 0
-    epsilon = 1.
+    learning_steps = 0
+    epsilon = .1
 
     best_reward = -999.  # TODO: save THE BEST THE BEST THE BEST THE BEST
 
@@ -166,10 +170,11 @@ def train():
                             else:
                                 qpre[i, actions[indexes[i]]] = rewards[indexes[i]] + args.gamma * np.amax(qpost[i])
                         model.train_on_batch(pre_sample, qpre)
+                        learning_steps += 1
 
                 if timestep % args.target_net_update_frequency == 0:
                     if args.verbose > 0:
-                        print('timestep:', timestep, 'DDQN: Updating weights')
+                        print('learned on batch:', learning_steps, 'DDQN: Updating weights')
                     weights = model.get_weights()
                     target_model.set_weights(weights)
                         # weights = model.get_weights()
@@ -203,6 +208,7 @@ def play():
     f = open(args.load_path, 'r')
     weights = pickle.load(f)
     target_model.set_weights(weights)
+    model.set_weights(weights)
     f.close()
     total_reward = 0
     timestep = 0
