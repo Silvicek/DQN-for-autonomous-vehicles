@@ -6,7 +6,6 @@ from keras.layers import Input, Dense, Lambda
 from keras.layers.normalization import BatchNormalization
 from keras import initializations
 from keras import backend as K
-import pickle
 import numpy as np
 
 
@@ -47,12 +46,12 @@ parser.add_argument('--replay_start_size', type=int, default=5000)
 parser.add_argument('--train_repeat', type=int, default=10)
 parser.add_argument('--gamma', type=float, default=0.99)
 # parser.add_argument('--tau', type=float, default=0.001)
-parser.add_argument('--episodes', type=int, default=1000000)
+parser.add_argument('--episodes', type=int, default=10000)
 parser.add_argument('--max_timesteps', type=int, default=2000)
 parser.add_argument('--activation', choices=['tanh', 'relu'], default='tanh')
 parser.add_argument('--optimizer', choices=['adam', 'rmsprop'], default='adam')
 # parser.add_argument('--optimizer_lr', type=float, default=0.001)
-parser.add_argument('--exploration', type=float, default=0.1)
+parser.add_argument('--exploration', type=float, default=0.1)  # TODO: remove?
 parser.add_argument('--advantage', choices=['naive', 'max', 'avg'], default='naive')
 parser.add_argument('--display', action='store_true', default=True)
 parser.add_argument('--no_display', dest='display', action='store_false')
@@ -90,8 +89,19 @@ target_model = Model(input=x, output=z)
 target_model.set_weights(model.get_weights())
 
 
+if args.load_path is not None:
+    f = open(args.load_path, 'r')
+    weights = np.load(f)
+    target_model.set_weights(weights)
+    model.set_weights(weights)
+    f.close()
+
+
 def update_exploration(e):  # TODO: dynamic change
-    return e
+    if e <= args.exploration:
+        return e
+    else:
+        return e - 2./args.episodes
 
 
 def train():
@@ -104,15 +114,15 @@ def train():
     total_reward = 0
     timestep = 0
     learning_steps = 0
-    epsilon = .1
+    epsilon = 1.
 
     best_reward = -999.  # TODO: save THE BEST THE BEST THE BEST THE BEST
 
     for i_episode in range(args.episodes):
         observation = env.reset()
         episode_reward = 0
+        epsilon = update_exploration(epsilon)
         for t in range(args.max_timesteps):
-            epsilon = update_exploration(epsilon)
             if args.display:
                 env.render()
 
@@ -190,10 +200,9 @@ def train():
 
         if i_episode % args.save_frequency == 0:
             weights = target_model.get_weights()
-            file_name = args.environment+'_'+str(i_episode)+str('_%.2f' % episode_reward)+'.mdl'
-            f = open(args.save_path+'/'+file_name, 'w')
-            pickle.dump(weights, f)
-            f.close()
+            print target_model.get_weights()
+            file_name = args.environment+'_'+str(i_episode)+str('_%.2f' % episode_reward)
+            np.save(args.save_path+'/'+file_name, weights)
 
         print("Episode {} finished after {} timesteps, episode reward {}".format(i_episode + 1, t + 1, episode_reward))
         total_reward += episode_reward
@@ -205,21 +214,14 @@ def train():
 
 
 def play():
-    f = open(args.load_path, 'r')
-    weights = pickle.load(f)
-    target_model.set_weights(weights)
-    model.set_weights(weights)
-    f.close()
     total_reward = 0
     timestep = 0
-
     for i_episode in range(args.episodes):
         observation = env.reset()
         episode_reward = 0
         for t in range(args.max_timesteps):
             if args.display:
                 env.render()
-
             s = np.array([observation])
             q = target_model.predict(s, batch_size=1)
             action = np.argmax(q[0])
