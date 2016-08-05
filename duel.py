@@ -63,7 +63,7 @@ parser.add_argument('--replay_memory_size', type=int, default=100000)
 
 parser.add_argument('--save_frequency', type=int, default=100)
 parser.add_argument('--save_path', type=str, default='models')
-parser.add_argument('--mode', choices=['train', 'play'], default='train')
+parser.add_argument('--mode', choices=['train', 'play', 'vtrain'], default='train')
 parser.add_argument('--load_path')
 
 # parser.add_argument('--environment', type=str, default='CartPole-v0')
@@ -246,5 +246,8 @@ def play():
 
 
 if __name__ == '__main__':
-    eval(args.mode+'()')
+    if 'train' in args.mode:
+        train()
+    else:
+        play()
 
