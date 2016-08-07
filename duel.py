@@ -1,39 +1,12 @@
 import argparse
 import gym
 from gym.spaces import Box, Discrete
-from keras.models import Model
+from keras.models import Model, model_from_json
 from keras.layers import Input, Dense, Lambda
 from keras.layers.normalization import BatchNormalization
 from keras import initializations
 from keras import backend as K
 import numpy as np
-
-
-def createLayers():
-    custom_init = lambda shape, name: initializations.normal(shape, scale=0.01, name=name)
-    x = Input(shape=env.observation_space.shape)
-    if args.batch_norm:
-        h = BatchNormalization()(x)
-    else:
-        h = x
-    for i in range(args.layers):
-        h = Dense(args.hidden_size, activation=args.activation, init=custom_init)(h)
-        if args.batch_norm and i != args.layers - 1:
-            h = BatchNormalization()(h)
-    y = Dense(env.action_space.n + 1)(h)
-    if args.advantage == 'avg':
-        z = Lambda(lambda a: K.expand_dims(a[:, 0], dim=-1) + a[:, 1:] - K.mean(a[:, 1:], keepdims=True),
-                   output_shape=(env.action_space.n,))(y)
-    elif args.advantage == 'max':
-        z = Lambda(lambda a: K.expand_dims(a[:, 0], dim=-1) + a[:, 1:] - K.max(a[:, 1:], keepdims=True),
-                   output_shape=(env.action_space.n,))(y)
-    elif args.advantage == 'naive':
-        z = Lambda(lambda a: K.expand_dims(a[:, 0], dim=-1) + a[:, 1:], output_shape=(env.action_space.n,))(y)
-    else:
-        assert False
-
-    return x, z
-
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--verbose', type=int, default=0)
@@ -65,36 +38,54 @@ parser.add_argument('--save_path', type=str, default='models')
 parser.add_argument('--mode', choices=['train', 'play', 'vtrain'], default='train')
 parser.add_argument('--load_path')
 
-# parser.add_argument('--environment', type=str, default='CartPole-v0')
-# parser.add_argument('--environment', type=str, default='ACar-v0')
 parser.add_argument('environment')
 
 args = parser.parse_args()
 
-env = gym.make(args.environment)
-env.configure(args.mode)
-assert isinstance(env.observation_space, Box)
-assert isinstance(env.action_space, Discrete)
 
-if args.gym_record:
-    env.monitor.start(args.gym_record, force=True)
+def create_models():
+    x, z = createLayers()
+    model = Model(input=x, output=z)
+    model.summary()
+    model.compile(optimizer='adam', loss='mse')
 
-x, z = createLayers()
-model = Model(input=x, output=z)
-model.summary()
-model.compile(optimizer='adam', loss='mse')
+    x, z = createLayers()
+    target_model = Model(input=x, output=z)
 
-x, z = createLayers()
-target_model = Model(input=x, output=z)
-target_model.set_weights(model.get_weights())
+    if args.load_path is not None:
+        model.load_weights(args.load_path)
+    target_model.set_weights(model.get_weights())
+
+    return model, target_model
 
 
-if args.load_path is not None:
-    f = open(args.load_path, 'r')
-    weights = np.load(f)
-    target_model.set_weights(weights)
-    model.set_weights(weights)
-    f.close()
+def createLayers():
+    custom_init = lambda shape, name: initializations.normal(shape, scale=0.01, name=name)
+    x = Input(shape=env.observation_space.shape)
+    if args.batch_norm:
+        h = BatchNormalization()(x)
+    else:
+        h = x
+    for i in range(args.layers):
+        h = Dense(args.hidden_size, activation=args.activation, init=custom_init)(h)
+        if args.batch_norm and i != args.layers - 1:
+            h = BatchNormalization()(h)
+    y = Dense(env.action_space.n + 1)(h)
+    if args.advantage == 'avg':
+        z = Lambda(lambda a: K.expand_dims(a[:, 0], dim=-1) + a[:, 1:] - K.mean(a[:, 1:], keepdims=True),
+                   output_shape=(env.action_space.n,))(y)
+    elif args.advantage == 'max':
+        z = Lambda(lambda a: K.expand_dims(a[:, 0], dim=-1) + a[:, 1:] - K.max(a[:, 1:], keepdims=True),
+                   output_shape=(env.action_space.n,))(y)
+    elif args.advantage == 'naive':
+        z = Lambda(lambda a: K.expand_dims(a[:, 0], dim=-1) + a[:, 1:], output_shape=(env.action_space.n,))(y)
+    else:
+        assert False
+
+    return x, z
+
+
+
 
 
 def update_exploration(e):  # TODO: dynamic change
@@ -199,10 +190,8 @@ def train():
                 break
 
         if i_episode % args.save_frequency == 0:
-            weights = target_model.get_weights()
-            print target_model.get_weights()
             file_name = args.environment+'_'+str(i_episode)+str('_%.2f' % episode_reward)
-            np.save(args.save_path+'/'+file_name, weights)
+            target_model.save_weights(args.save_path+'/'+file_name)
 
         print("Episode {} finished after {} timesteps, episode reward {}".format(i_episode + 1, t + 1, episode_reward))
         total_reward += episode_reward
@@ -222,6 +211,9 @@ def play():
         for t in range(args.max_timesteps):
             if args.display:
                 env.render()
+            print observation[:3]
+            # import time
+            # time.sleep(1)
             s = np.array([observation])
             q = target_model.predict(s, batch_size=1)
             action = np.argmax(q[0])
@@ -248,6 +240,15 @@ def play():
 
 
 if __name__ == '__main__':
+    env = gym.make(args.environment)
+    env.configure(args.mode)
+    assert isinstance(env.observation_space, Box)
+    assert isinstance(env.action_space, Discrete)
+
+    if args.gym_record:
+        env.monitor.start(args.gym_record, force=True)
+
+    model, target_model = create_models()
     if 'train' in args.mode:
         train()
     else:
