@@ -1,7 +1,7 @@
 import argparse
 import gym
 from gym.spaces import Box, Discrete
-from keras.models import Model, model_from_json
+from keras.models import Model, Sequential
 from keras.layers import Input, Dense, Lambda
 from keras.layers.normalization import BatchNormalization
 from keras import initializations
@@ -19,7 +19,7 @@ parser.add_argument('--replay_start_size', type=int, default=5000)
 parser.add_argument('--train_repeat', type=int, default=10)
 parser.add_argument('--gamma', type=float, default=0.99)
 # parser.add_argument('--tau', type=float, default=0.001)
-parser.add_argument('--episodes', type=int, default=10000)
+parser.add_argument('--episodes', type=int, default=20000)
 parser.add_argument('--max_timesteps', type=int, default=2000)
 parser.add_argument('--activation', choices=['tanh', 'relu'], default='tanh')
 parser.add_argument('--optimizer', choices=['adam', 'rmsprop'], default='adam')
@@ -47,7 +47,7 @@ def create_models():
     x, z = createLayers()
     model = Model(input=x, output=z)
     model.summary()
-    model.compile(optimizer='adam', loss='mse')
+    model.compile(optimizer=args.optimizer, loss='mse')
 
     x, z = createLayers()
     target_model = Model(input=x, output=z)
@@ -117,14 +117,17 @@ def train():
             if args.display:
                 env.render()
 
-            if i_episode % args.save_frequency != 0 and \
+            if i_episode % args.save_frequency >= 10 and \
                (timestep < args.replay_start_size or np.random.random() < epsilon):
                 action = env.action_space.sample()
                 if args.verbose > 0:
                     print("e:", i_episode, "e.t:", t, "action:", action, "random")
             else:
                 s = np.array([observation])
-                q = model.predict(s, batch_size=1)
+                if i_episode % args.save_frequency < 10:
+                    q = target_model.predict(s, batch_size=1)
+                else:
+                    q = model.predict(s, batch_size=1)
                 action = np.argmax(q[0])
                 if args.verbose > 0:
                     print("e:", i_episode, "e.t:", t, "action:", action, "q:", q)
@@ -151,7 +154,7 @@ def train():
 
             timestep += 1
 
-            if timestep > args.replay_start_size:
+            if timestep > args.replay_start_size and i_episode % args.save_frequency >= 10:
                 if timestep % args.update_frequency == 0:
                     for k in xrange(args.train_repeat):
                         if len(prestates) > args.batch_size:
@@ -203,6 +206,9 @@ def train():
 
 
 def play():
+    if args.gym_record:
+        env.monitor.start(directory=args.gym_record,
+                          video_callable=lambda count: count % 1 == 0)
     total_reward = 0
     timestep = 0
     for i_episode in range(args.episodes):
@@ -211,7 +217,6 @@ def play():
         for t in range(args.max_timesteps):
             if args.display:
                 env.render()
-            print observation[:3]
             # import time
             # time.sleep(1)
             s = np.array([observation])
@@ -234,9 +239,6 @@ def play():
         total_reward += episode_reward
 
     print("Average reward per episode {}".format(total_reward / args.episodes))
-
-    if args.gym_record:
-        env.monitor.close()
 
 
 if __name__ == '__main__':
