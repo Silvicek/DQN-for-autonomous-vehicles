@@ -7,6 +7,7 @@ from keras.layers.normalization import BatchNormalization
 from keras import initializations
 from keras import backend as K
 import numpy as np
+import os
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--verbose', type=int, default=0)
@@ -41,6 +42,10 @@ parser.add_argument('--load_path')
 parser.add_argument('environment')
 
 args = parser.parse_args()
+
+if not os.path.exists(args.save_path):
+    print 'Creating model directory', args.save_path
+    os.makedirs(args.save_path)
 
 
 def create_models():
@@ -85,14 +90,16 @@ def createLayers():
     return x, z
 
 
-
-
-
 def update_exploration(e):  # TODO: dynamic change
     if e <= args.exploration:
         return e
     else:
         return e - 2./args.episodes
+
+
+def test_now(i):
+    """True if the agent should act according to the target network (no training)"""
+    return i % args.save_frequency < 10
 
 
 def train():
@@ -103,11 +110,12 @@ def train():
     terminals = []
 
     total_reward = 0
+    total_rewards = []
     timestep = 0
     learning_steps = 0
     epsilon = 1.
 
-    best_reward = -999.  # TODO: save THE BEST THE BEST THE BEST THE BEST
+    best_reward = -999.
 
     for i_episode in range(args.episodes):
         observation = env.reset()
@@ -117,14 +125,14 @@ def train():
             if args.display:
                 env.render()
 
-            if i_episode % args.save_frequency >= 10 and \
+            if not test_now(i_episode) and \
                (timestep < args.replay_start_size or np.random.random() < epsilon):
                 action = env.action_space.sample()
                 if args.verbose > 0:
                     print("e:", i_episode, "e.t:", t, "action:", action, "random")
             else:
                 s = np.array([observation])
-                if i_episode % args.save_frequency < 10:
+                if test_now(i_episode):
                     q = target_model.predict(s, batch_size=1)
                 else:
                     q = model.predict(s, batch_size=1)
@@ -192,12 +200,18 @@ def train():
             if done:
                 break
 
-        if i_episode % args.save_frequency == 0:
-            file_name = args.environment+'_'+str(i_episode)+str('_%.2f' % episode_reward)
-            target_model.save_weights(args.save_path+'/'+file_name)
-
         print("Episode {} finished after {} timesteps, episode reward {}".format(i_episode + 1, t + 1, episode_reward))
         total_reward += episode_reward
+        total_rewards.append(episode_reward)
+
+        if i_episode % args.save_frequency == 9:
+            avg_r = np.mean(total_rewards[-9:])
+            print 'Average reward:', avg_r
+            file_name = args.environment+'_'+str(i_episode)+str('_%.2f' % avg_r)
+            target_model.save_weights(args.save_path+'/'+file_name)
+            if np.mean(avg_r) > best_reward:
+                target_model.save_weights(args.save_path + '/' + 'best_model', overwrite=True)
+
 
     print("Average reward per episode {}".format(total_reward / args.episodes))
 
