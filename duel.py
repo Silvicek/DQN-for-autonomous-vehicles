@@ -2,18 +2,17 @@ import argparse
 import gym
 from gym.spaces import Box, Discrete
 from keras.models import Model, Sequential
-from keras.layers import Input, Dense, Lambda
+from keras.layers import Input, Dense, Lambda, LSTM, GRU, TimeDistributedDense
 from keras.layers.normalization import BatchNormalization
 from keras import initializations
 from keras import backend as K
 import numpy as np
+from scipy.ndimage.interpolation import shift
 import os
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--verbose', type=int, default=0)
 parser.add_argument('--batch_size', type=int, default=32)
-parser.add_argument('--hidden_size', type=int, default=100)
-parser.add_argument('--layers', type=int, default=1)
 parser.add_argument('--batch_norm', action="store_true", default=False)
 parser.add_argument('--no_batch_norm', action="store_false", dest='batch_norm')
 parser.add_argument('--replay_start_size', type=int, default=5000)
@@ -38,10 +37,22 @@ parser.add_argument('--save_frequency', type=int, default=100)
 parser.add_argument('--save_path', type=str, default='models')
 parser.add_argument('--mode', choices=['train', 'play', 'vtrain'], default='train')
 parser.add_argument('--load_path')
+parser.add_argument('--rnn_steps', type=int, default=10)
+parser.add_argument('--memory_steps', type=int, default=3)
+parser.add_argument('--rnn', action='store_true', default=False)
+parser.add_argument('--hidden_size', default='[20,20]')
 
 parser.add_argument('environment')
 
+
 args = parser.parse_args()
+
+assert isinstance(args.hidden_size, str)
+args.hidden_size = eval(args.hidden_size)
+args.layers = len(args.hidden_size)
+print [x for x in args.hidden_size]
+
+# NOTE: make this into a class?
 
 if not os.path.exists(args.save_path):
     print 'Creating model directory', args.save_path
@@ -49,12 +60,12 @@ if not os.path.exists(args.save_path):
 
 
 def create_models():
-    x, z = createLayers()
+    x, z = create_layers()
     model = Model(input=x, output=z)
     model.summary()
     model.compile(optimizer=args.optimizer, loss='mse')
 
-    x, z = createLayers()
+    x, z = create_layers()
     target_model = Model(input=x, output=z)
 
     if args.load_path is not None:
@@ -64,15 +75,26 @@ def create_models():
     return model, target_model
 
 
-def createLayers():
+def create_layers():
     custom_init = lambda shape, name: initializations.normal(shape, scale=0.01, name=name)
-    x = Input(shape=env.observation_space.shape)
+    if args.rnn:
+        x = Input(shape=(args.rnn_steps,)+env.observation_space.shape)
+    else:
+        x = Input(shape=env.observation_space.shape)
     if args.batch_norm:
         h = BatchNormalization()(x)
     else:
         h = x
-    for i in range(args.layers):
-        h = Dense(args.hidden_size, activation=args.activation, init=custom_init)(h)
+    for i, hidden_size in zip(range(args.layers), args.hidden_size):
+        if args.rnn:
+            if i == args.layers-1:
+                h = GRU(hidden_size, activation=args.activation, init=custom_init)(h)
+            else:
+                # activation = args.activation
+                h = TimeDistributedDense(hidden_size, init=custom_init)(h)
+        else:
+            h = Dense(hidden_size, activation=args.activation, init=custom_init)(h)
+
         if args.batch_norm and i != args.layers - 1:
             h = BatchNormalization()(h)
     y = Dense(env.action_space.n + 1)(h)
@@ -102,6 +124,22 @@ def test_now(i):
     return i % args.save_frequency < 10
 
 
+def get_state(obs):
+    global full_state
+    if args.rnn:
+        full_state = shift(full_state, (1, 0))
+        full_state[0] = obs
+        return full_state
+    else:
+        return obs
+
+
+def reset_environment():
+    global full_state
+    full_state = np.zeros_like(full_state)
+    return env.reset()
+
+
 def train():
     prestates = []
     actions = []
@@ -113,12 +151,12 @@ def train():
     total_rewards = []
     timestep = 0
     learning_steps = 0
-    epsilon = 1.
+    epsilon = .1
 
     best_reward = -999.
 
     for i_episode in range(args.episodes):
-        observation = env.reset()
+        observation = get_state(reset_environment())
         episode_reward = 0
         epsilon = update_exploration(epsilon)
         for t in range(args.max_timesteps):
@@ -131,11 +169,10 @@ def train():
                 if args.verbose > 0:
                     print("e:", i_episode, "e.t:", t, "action:", action, "random")
             else:
-                s = np.array([observation])
                 if test_now(i_episode):
-                    q = target_model.predict(s, batch_size=1)
+                    q = target_model.predict(np.array([observation]), batch_size=1)
                 else:
-                    q = model.predict(s, batch_size=1)
+                    q = model.predict(np.array([observation]), batch_size=1)
                 action = np.argmax(q[0])
                 if args.verbose > 0:
                     print("e:", i_episode, "e.t:", t, "action:", action, "q:", q)
@@ -152,6 +189,7 @@ def train():
             actions.append(action)
 
             observation, reward, done, info = env.step(action)
+            observation = get_state(observation)
             episode_reward += reward
             if args.verbose > 1:
                 print("reward:", reward)
@@ -206,12 +244,12 @@ def train():
 
         if i_episode % args.save_frequency == 9:
             avg_r = np.mean(total_rewards[-9:])
-            print 'Average reward:', avg_r
+            print 'Average reward %.2f (after %i learning steps):' % (avg_r, learning_steps)
             file_name = args.environment+'_'+str(i_episode)+str('_%.2f' % avg_r)
             target_model.save_weights(args.save_path+'/'+file_name)
-            if np.mean(avg_r) > best_reward:
+            if avg_r > best_reward:
+                best_reward = avg_r
                 target_model.save_weights(args.save_path + '/' + 'best_model', overwrite=True)
-
 
     print("Average reward per episode {}".format(total_reward / args.episodes))
 
@@ -226,7 +264,7 @@ def play():
     total_reward = 0
     timestep = 0
     for i_episode in range(args.episodes):
-        observation = env.reset()
+        observation = get_state(reset_environment())
         episode_reward = 0
         for t in range(args.max_timesteps):
             if args.display:
@@ -240,6 +278,7 @@ def play():
                 print("e:", i_episode, "e.t:", t, "action:", action, "q:", q)
 
             observation, reward, done, info = env.step(action)
+            observation = get_state(observation)
             episode_reward += reward
             if args.verbose > 1:
                 print("reward:", reward)
@@ -257,7 +296,12 @@ def play():
 
 if __name__ == '__main__':
     env = gym.make(args.environment)
-    env.configure(args.mode)
+    env.configure(args)
+    if args.rnn:
+        full_state = np.zeros((args.rnn_steps,) + env.observation_space.shape)
+    else:
+        full_state = np.zeros(env.observation_space.shape)
+
     assert isinstance(env.observation_space, Box)
     assert isinstance(env.action_space, Discrete)
 
