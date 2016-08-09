@@ -252,9 +252,22 @@ def train():
                 target_model.save_weights(args.save_path + '/' + 'best_model', overwrite=True)
 
     print("Average reward per episode {}".format(total_reward / args.episodes))
+    print_results(best_reward)
 
     if args.gym_record:
         env.monitor.close()
+
+
+def print_results(reward):
+    path = args.save_path+'/results.csv'
+    args.reward = reward
+    d = vars(args)
+    import csv
+
+    with open(path, 'wb') as f:  # Just use 'w' mode in 3.x
+        w = csv.DictWriter(f, d.keys())
+        w.writeheader()
+        w.writerow(d)
 
 
 def play():
@@ -292,6 +305,7 @@ def play():
         total_reward += episode_reward
 
     print("Average reward per episode {}".format(total_reward / args.episodes))
+
 
 
 if __name__ == '__main__':
