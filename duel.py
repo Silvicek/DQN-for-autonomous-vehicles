@@ -2,7 +2,7 @@ import argparse
 import gym
 from gym.spaces import Box, Discrete
 from keras.models import Model, Sequential
-from keras.layers import Input, Dense, Lambda, LSTM, GRU, TimeDistributedDense
+from keras.layers import Input, Dense, Lambda, LSTM, GRU, TimeDistributed
 from keras.layers.normalization import BatchNormalization
 from keras import initializations
 from keras import backend as K
@@ -91,7 +91,7 @@ def create_layers():
                 h = GRU(hidden_size, activation=args.activation, init=custom_init)(h)
             else:
                 # activation = args.activation
-                h = TimeDistributedDense(hidden_size, init=custom_init)(h)
+                h = TimeDistributed(Dense(hidden_size, init=custom_init))(h)
         else:
             h = Dense(hidden_size, activation=args.activation, init=custom_init)(h)
 
