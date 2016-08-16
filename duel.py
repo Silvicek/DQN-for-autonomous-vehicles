@@ -9,6 +9,7 @@ from keras import backend as K
 import numpy as np
 from scipy.ndimage.interpolation import shift
 import os
+import time
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--verbose', type=int, default=0)
@@ -41,6 +42,7 @@ parser.add_argument('--rnn_steps', type=int, default=10)
 parser.add_argument('--memory_steps', type=int, default=3)
 parser.add_argument('--rnn', action='store_true', default=False)
 parser.add_argument('--hidden_size', default='[20,20]')
+parser.add_argument('--wait', type=float, default=.015)
 
 parser.add_argument('environment')
 
@@ -163,8 +165,7 @@ def train():
             if args.display:
                 env.render()
 
-            if not test_now(i_episode) and \
-               (timestep < args.replay_start_size or np.random.random() < epsilon):
+            if timestep < args.replay_start_size or np.random.random() < epsilon:
                 action = env.action_space.sample()
                 if args.verbose > 0:
                     print("e:", i_episode, "e.t:", t, "action:", action, "random")
@@ -204,8 +205,6 @@ def train():
                 if timestep % args.update_frequency == 0:
                     for k in xrange(args.train_repeat):
                         if len(prestates) > args.batch_size:
-                            # indexes = range(args.batch_size)
-                            # indexes = np.random.choice(len(prestates), size=args.batch_size)
                             indexes = np.random.randint(len(prestates), size=args.batch_size)
                         else:
                             indexes = range(len(prestates))
@@ -227,13 +226,6 @@ def train():
                         print('learned on batch:', learning_steps, 'DDQN: Updating weights')
                     weights = model.get_weights()
                     target_model.set_weights(weights)
-                        # weights = model.get_weights()
-                        # target_weights = target_model.get_weights()
-                        # for i in xrange(len(weights)):
-                        #     weights[i] *= args.tau
-                        #     target_weights[i] *= (1 - args.tau)
-                        #     target_weights[i] += weights[i]
-                        # target_model.set_weights(target_weights)
 
             if done:
                 break
@@ -282,11 +274,14 @@ def play():
         for t in range(args.max_timesteps):
             if args.display:
                 env.render()
-            # import time
-            # time.sleep(1)
-            s = np.array([observation])
-            q = target_model.predict(s, batch_size=1)
-            action = np.argmax(q[0])
+
+            time.sleep(args.wait)
+            if np.random.random() < .1:
+                action = env.action_space.sample()
+            else:
+                s = np.array([observation])
+                q = target_model.predict(s, batch_size=1)
+                action = np.argmax(q[0])
             if args.verbose > 0:
                 print("e:", i_episode, "e.t:", t, "action:", action, "q:", q)
 
@@ -307,8 +302,8 @@ def play():
     print("Average reward per episode {}".format(total_reward / args.episodes))
 
 
-
 if __name__ == '__main__':
+    np.random.seed(1337)
     env = gym.make(args.environment)
     env.configure(args)
     if args.rnn:
