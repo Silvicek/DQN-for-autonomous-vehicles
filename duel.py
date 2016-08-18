@@ -32,7 +32,7 @@ parser.add_argument('--no_display', dest='display', action='store_false')
 parser.add_argument('--gym_record')
 parser.add_argument('--update_frequency', type=int, default=4)
 parser.add_argument('--target_net_update_frequency', type=int, default=32)
-parser.add_argument('--replay_memory_size', type=int, default=100000)
+parser.add_argument('--replay_memory_size', type=int, default=1000000)
 
 parser.add_argument('--save_frequency', type=int, default=100)
 parser.add_argument('--save_path', type=str, default='models')
@@ -153,7 +153,7 @@ def train():
     total_rewards = []
     timestep = 0
     learning_steps = 0
-    epsilon = .1
+    epsilon = .3
 
     best_reward = -999.
 
@@ -238,8 +238,8 @@ def train():
             avg_r = float(np.mean(total_rewards[-9:]))
             print 'Average reward (after %i learning steps): %.2f' % (learning_steps, avg_r)
             file_name = args.environment+'_'+str(i_episode)+str('_%.2f' % avg_r)
-            target_model.save_weights(args.save_path+'/'+file_name)
-            if avg_r > best_reward:
+            target_model.save_weights(args.save_path+'/'+file_name, overwrite=True)
+            if avg_r >= best_reward:
                 best_reward = avg_r
                 target_model.save_weights(args.save_path + '/' + 'best_model', overwrite=True)
 
