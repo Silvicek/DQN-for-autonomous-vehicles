@@ -238,7 +238,7 @@ def train():
             avg_r = float(np.mean(total_rewards[-9:]))
             print 'Average reward (after %i learning steps): %.2f' % (learning_steps, avg_r)
             file_name = args.environment+'_'+str(i_episode)+str('_%.2f' % avg_r)
-            target_model.save_weights(args.save_path+'/'+file_name)
+            target_model.save_weights(args.save_path+'/'+file_name, overwrite=True)
             if avg_r > best_reward:
                 best_reward = avg_r
                 target_model.save_weights(args.save_path + '/' + 'best_model', overwrite=True)
