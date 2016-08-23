@@ -230,13 +230,19 @@ def train():
             if done:
                 break
 
-        print("Episode {} finished after {} timesteps, episode reward {}".format(i_episode + 1, t + 1, episode_reward))
+        episode_print = "Episode {} finished after {} timesteps, episode reward {}".format(i_episode + 1, t + 1, episode_reward)
+        if episode_reward > 0:
+            print bcolors.OKGREEN + episode_print + bcolors.ENDC
+        else:
+            print episode_print
+
+
         total_reward += episode_reward
         total_rewards.append(episode_reward)
 
         if i_episode % args.save_frequency == 9:
             avg_r = float(np.mean(total_rewards[-9:]))
-            print 'Average reward (after %i learning steps): %.2f' % (learning_steps, avg_r)
+            print bcolors.YELLOW + 'Average reward (after %i learning steps): %.2f' % (learning_steps, avg_r) + bcolors.ENDC
             file_name = args.environment+'_'+str(i_episode)+str('_%.2f' % avg_r)
             target_model.save_weights(args.save_path+'/'+file_name, overwrite=True)
             if avg_r > best_reward:
@@ -300,6 +306,26 @@ def play():
         total_reward += episode_reward
 
     print("Average reward per episode {}".format(total_reward / args.episodes))
+
+
+class bcolors:
+    HEADER = '\033[95m'
+    OKBLUE = '\033[94m'
+    OKGREEN = '\033[92m'
+    YELLOW = '\033[93m'
+    FAIL = '\033[91m'
+    ENDC = '\033[0m'
+
+    def disable(self):
+        self.HEADER = ''
+        self.OKBLUE = ''
+        self.OKGREEN = ''
+        self.YELLOW = ''
+        self.FAIL = ''
+        self.ENDC = ''
+
+
+
 
 
 if __name__ == '__main__':
