@@ -1,15 +1,11 @@
 import argparse
 import gym
 from gym.spaces import Box, Discrete
-from keras.models import Model, Sequential
-from keras.layers import Input, Dense, Lambda, LSTM, GRU, TimeDistributed
-from keras.layers.normalization import BatchNormalization
-from keras import initializations
-from keras import backend as K
 import numpy as np
 from scipy.ndimage.interpolation import shift
 import os
 import time
+from duel_aux import create_models, bcolors, save, load
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--verbose', type=int, default=0)
@@ -52,94 +48,10 @@ args = parser.parse_args()
 assert isinstance(args.hidden_size, str)
 args.hidden_size = eval(args.hidden_size)
 args.layers = len(args.hidden_size)
-print [x for x in args.hidden_size]
-
-# NOTE: make this into a class?
 
 if not os.path.exists(args.save_path):
     print 'Creating model directory', args.save_path
     os.makedirs(args.save_path)
-
-
-def create_models():
-    x, z = create_layers()
-    model = Model(input=x, output=z)
-    model.summary()
-    model.compile(optimizer=args.optimizer, loss='mse')
-
-    x, z = create_layers()
-    target_model = Model(input=x, output=z)
-
-    if args.load_path is not None:
-        model.load_weights(args.load_path)
-    target_model.set_weights(model.get_weights())
-
-    return model, target_model
-
-
-def create_layers():
-    custom_init = lambda shape, name: initializations.normal(shape, scale=0.01, name=name)
-    if args.rnn:
-        x = Input(shape=(args.rnn_steps,)+env.observation_space.shape)
-    else:
-        x = Input(shape=env.observation_space.shape)
-    if args.batch_norm:
-        h = BatchNormalization()(x)
-    else:
-        h = x
-    for i, hidden_size in zip(range(args.layers), args.hidden_size):
-        if args.rnn:
-            if i == args.layers-1:
-                h = GRU(hidden_size, activation=args.activation, init=custom_init)(h)
-            else:
-                # activation = args.activation
-                h = TimeDistributed(Dense(hidden_size, init=custom_init))(h)
-        else:
-            h = Dense(hidden_size, activation=args.activation, init=custom_init)(h)
-
-        if args.batch_norm and i != args.layers - 1:
-            h = BatchNormalization()(h)
-    y = Dense(env.action_space.n + 1)(h)
-    if args.advantage == 'avg':
-        z = Lambda(lambda a: K.expand_dims(a[:, 0], dim=-1) + a[:, 1:] - K.mean(a[:, 1:], keepdims=True),
-                   output_shape=(env.action_space.n,))(y)
-    elif args.advantage == 'max':
-        z = Lambda(lambda a: K.expand_dims(a[:, 0], dim=-1) + a[:, 1:] - K.max(a[:, 1:], keepdims=True),
-                   output_shape=(env.action_space.n,))(y)
-    elif args.advantage == 'naive':
-        z = Lambda(lambda a: K.expand_dims(a[:, 0], dim=-1) + a[:, 1:], output_shape=(env.action_space.n,))(y)
-    else:
-        assert False
-
-    return x, z
-
-
-def update_exploration(e):  # TODO: dynamic change
-    if e <= args.exploration:
-        return e
-    else:
-        return e - 2./args.episodes
-
-
-def test_now(i):
-    """True if the agent should act according to the target network (no training)"""
-    return i % args.save_frequency < 10
-
-
-def get_state(obs):
-    global full_state
-    if args.rnn:
-        full_state = shift(full_state, (1, 0))
-        full_state[0] = obs
-        return full_state
-    else:
-        return obs
-
-
-def reset_environment():
-    global full_state
-    full_state = np.zeros_like(full_state)
-    return env.reset()
 
 
 def train():
@@ -236,18 +148,17 @@ def train():
         else:
             print episode_print
 
-
         total_reward += episode_reward
         total_rewards.append(episode_reward)
 
         if i_episode % args.save_frequency == 9:
             avg_r = float(np.mean(total_rewards[-9:]))
-            print bcolors.YELLOW + 'Average reward (after %i learning steps): %.2f' % (learning_steps, avg_r) + bcolors.ENDC
-            file_name = args.environment+'_'+str(i_episode)+str('_%.2f' % avg_r)
-            target_model.save_weights(args.save_path+'/'+file_name, overwrite=True)
+            print bcolors.YELLOW + 'Average reward (after %i learning steps): %.2f (best is %.2f)' % (learning_steps, avg_r, best_reward) + bcolors.ENDC
+            folder_name = args.environment+'_'+str(i_episode)+str('_%.2f' % avg_r)
+            save(args, folder_name, target_model)
             if avg_r > best_reward:
                 best_reward = avg_r
-                target_model.save_weights(args.save_path + '/' + 'best_model', overwrite=True)
+                save(args, 'best_model', target_model)
 
     print("Average reward per episode {}".format(total_reward / args.episodes))
     print_results(best_reward)
@@ -308,30 +219,41 @@ def play():
     print("Average reward per episode {}".format(total_reward / args.episodes))
 
 
-class bcolors:
-    HEADER = '\033[95m'
-    OKBLUE = '\033[94m'
-    OKGREEN = '\033[92m'
-    YELLOW = '\033[93m'
-    FAIL = '\033[91m'
-    ENDC = '\033[0m'
 
-    def disable(self):
-        self.HEADER = ''
-        self.OKBLUE = ''
-        self.OKGREEN = ''
-        self.YELLOW = ''
-        self.FAIL = ''
-        self.ENDC = ''
+def update_exploration(e):  # TODO: dynamic change
+    if e <= args.exploration:
+        return e
+    else:
+        return e - 2./args.episodes
 
 
+def test_now(i):
+    """True if the agent should act according to the target network (no training)"""
+    return i % args.save_frequency < 10
 
+
+def get_state(obs):
+    global full_state
+    if args.rnn:
+        full_state = shift(full_state, (1, 0))
+        full_state[0] = obs
+        return full_state
+    else:
+        return obs
+
+
+def reset_environment():
+    global full_state
+    full_state = np.zeros_like(full_state)
+    return env.reset()
 
 
 if __name__ == '__main__':
     np.random.seed(1337)
     env = gym.make(args.environment)
     env.configure(args)
+    args.observation_space_shape = env.observation_space.shape
+    args.action_space_size = env.action_space.n
     if args.rnn:
         full_state = np.zeros((args.rnn_steps,) + env.observation_space.shape)
     else:
@@ -343,7 +265,10 @@ if __name__ == '__main__':
     if args.gym_record:
         env.monitor.start(args.gym_record, force=True)
 
-    model, target_model = create_models()
+    if args.load_path:
+        model, target_model, _ = load(args.load_path)
+    else:
+        model, target_model = create_models(args)
     if 'train' in args.mode:
         train()
     else:
