@@ -5,7 +5,8 @@ import numpy as np
 from scipy.ndimage.interpolation import shift
 import os
 import time
-from duel_aux import create_models, bcolors, save, load
+from duel_aux import bcolors, print_results
+from duel_model import create_models, save, load, sample, update_exploration
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--verbose', type=int, default=0)
@@ -32,13 +33,16 @@ parser.add_argument('--replay_memory_size', type=int, default=100000)
 
 parser.add_argument('--save_frequency', type=int, default=100)
 parser.add_argument('--save_path', type=str, default='models')
-parser.add_argument('--mode', choices=['train', 'play', 'vtrain'], default='train')
+parser.add_argument('--mode', choices=['train', 'play', 'vtrain', 'play2'], default='train')
 parser.add_argument('--load_path')
 parser.add_argument('--rnn_steps', type=int, default=10)
 parser.add_argument('--memory_steps', type=int, default=3)
 parser.add_argument('--rnn', action='store_true', default=False)
 parser.add_argument('--hidden_size', default='[20,20]')
 parser.add_argument('--wait', type=float, default=.015)
+parser.add_argument('--exploration_strategy', choices=['semi_uniform_distributed',
+                                                       'boltzmann_distributed'], default='semi_uniform_distributed')
+parser.add_argument('--exploration_params', type=float, default=.1)
 
 parser.add_argument('environment')
 
@@ -65,20 +69,19 @@ def train():
     total_rewards = []
     timestep = 0
     learning_steps = 0
-    epsilon = .1
 
     best_reward = -999.
 
     for i_episode in range(args.episodes):
         observation = get_state(reset_environment())
         episode_reward = 0
-        epsilon = update_exploration(epsilon)
+        update_exploration(args)
         for t in range(args.max_timesteps):
             if args.display:
                 env.render()
 
-            if timestep < args.replay_start_size or np.random.random() < epsilon:
-                action = env.action_space.sample()
+            if timestep < args.replay_start_size:
+                action = env.action_space.sample()  # pure random
                 if args.verbose > 0:
                     print("e:", i_episode, "e.t:", t, "action:", action, "random")
             else:
@@ -86,7 +89,7 @@ def train():
                     q = target_model.predict(np.array([observation]), batch_size=1)
                 else:
                     q = model.predict(np.array([observation]), batch_size=1)
-                action = np.argmax(q[0])
+                action = sample(args, q)
                 if args.verbose > 0:
                     print("e:", i_episode, "e.t:", t, "action:", action, "q:", q)
 
@@ -161,22 +164,10 @@ def train():
                 save(args, 'best_model', target_model)
 
     print("Average reward per episode {}".format(total_reward / args.episodes))
-    print_results(best_reward)
+    print_results(best_reward, args)
 
     if args.gym_record:
         env.monitor.close()
-
-
-def print_results(reward):
-    path = args.save_path+'/results.csv'
-    args.reward = reward
-    d = vars(args)
-    import csv
-
-    with open(path, 'wb') as f:  # Just use 'w' mode in 3.x
-        w = csv.DictWriter(f, d.keys())
-        w.writeheader()
-        w.writerow(d)
 
 
 def play():
@@ -192,13 +183,12 @@ def play():
             if args.display:
                 env.render()
 
-            time.sleep(args.wait)
-            if np.random.random() < .1:
-                action = env.action_space.sample()
-            else:
-                s = np.array([observation])
-                q = target_model.predict(s, batch_size=1)
-                action = np.argmax(q[0])
+            if args.mode == 'play':
+                time.sleep(args.wait)
+            s = np.array([observation])
+            q = target_model.predict(s, batch_size=1)
+
+            action = sample(args, q)  # TODO: make sure this isn't too random
             if args.verbose > 0:
                 print("e:", i_episode, "e.t:", t, "action:", action, "q:", q)
 
@@ -213,18 +203,15 @@ def play():
             if done:
                 break
 
-        print("Episode {} finished after {} timesteps, episode reward {}".format(i_episode + 1, t + 1, episode_reward))
+        episode_print = "Episode {} finished after {} timesteps, episode reward {}".format(i_episode + 1, t + 1,
+                                                                                           episode_reward)
+        if episode_reward > 0:
+            print bcolors.OKGREEN + episode_print + bcolors.ENDC
+        else:
+            print episode_print
         total_reward += episode_reward
 
     print("Average reward per episode {}".format(total_reward / args.episodes))
-
-
-
-def update_exploration(e):  # TODO: dynamic change
-    if e <= args.exploration:
-        return e
-    else:
-        return e - 2./args.episodes
 
 
 def test_now(i):
@@ -251,6 +238,11 @@ def reset_environment():
 if __name__ == '__main__':
     np.random.seed(1337)
     env = gym.make(args.environment)
+    if args.load_path:
+        _, _, args_l = load(args.load_path, models=False)
+        args.action_space_size = args_l.action_space_size
+        args.memory_steps = args_l.memory_steps
+
     env.configure(args)
     args.observation_space_shape = env.observation_space.shape
     args.action_space_size = env.action_space.n
