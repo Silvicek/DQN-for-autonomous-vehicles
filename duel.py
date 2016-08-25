@@ -9,44 +9,50 @@ from duel_aux import bcolors, print_results, ReplayHolder
 from duel_model import create_models, save, load, sample, update_exploration, DuelingModel
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--verbose', type=int, default=0)
+
+# ========== TRAINING PARAMETERS
 parser.add_argument('--batch_size', type=int, default=32)
 parser.add_argument('--batch_norm', action="store_true", default=False)
 parser.add_argument('--no_batch_norm', action="store_false", dest='batch_norm')
 parser.add_argument('--replay_start_size', type=int, default=5000)
 parser.add_argument('--train_repeat', type=int, default=10)
 parser.add_argument('--gamma', type=float, default=0.99)
-# parser.add_argument('--tau', type=float, default=0.001)
 parser.add_argument('--episodes', type=int, default=20000)
-parser.add_argument('--max_timesteps', type=int, default=1500)
-parser.add_argument('--activation', choices=['tanh', 'relu'], default='tanh')
 parser.add_argument('--optimizer', choices=['adam', 'rmsprop'], default='adam')
-# parser.add_argument('--optimizer_lr', type=float, default=0.001)
 parser.add_argument('--exploration', type=float, default=0.1)  # TODO: remove?
+parser.add_argument('--update_frequency', type=int, default=4)
+parser.add_argument('--target_net_update_frequency', type=int, default=32)
+parser.add_argument('--replay_size', type=int, default=100000)
+parser.add_argument('--save_frequency', type=int, default=100)
+parser.add_argument('--max_timesteps', type=int, default=1500)
+
+parser.add_argument('--prioritize', action="store_true", default=False)
+
+parser.add_argument('--exploration_params', type=float, default=.1)
+parser.add_argument('--exploration_strategy', choices=['semi_uniform_distributed', 'e_greedy',
+                                                       'boltzmann_distributed'], default='semi_uniform_distributed')
+
+# ========== MODEL PARAMETERS
+parser.add_argument('--activation', choices=['tanh', 'relu'], default='tanh')
 parser.add_argument('--advantage', choices=['naive', 'max', 'avg'], default='naive')
+parser.add_argument('--memory_steps', type=int, default=3)
+parser.add_argument('--rnn_steps', type=int, default=10)
+parser.add_argument('--rnn', action='store_true', default=False)
+parser.add_argument('--hidden_size', default='[20,20]')
+
+# ========== OTHER PARAMETERS
+# parser.add_argument('environment')
+# parser.add_argument('--environment', type=str, default='ACar-v0')
+parser.add_argument('--environment', type=str, default='CartPole-v0')
+parser.add_argument('--verbose', type=int, default=0)
 parser.add_argument('--display', action='store_true', default=True)
 parser.add_argument('--no_display', dest='display', action='store_false')
 parser.add_argument('--gym_record')
-parser.add_argument('--update_frequency', type=int, default=4)
-parser.add_argument('--target_net_update_frequency', type=int, default=32)
-parser.add_argument('--replay_memory_size', type=int, default=100000)
-
-parser.add_argument('--save_frequency', type=int, default=100)
+parser.add_argument('--wait', type=float, default=.015)
+parser.add_argument('--seed', type=int, default=1337)
 parser.add_argument('--save_path', type=str, default='models')
 parser.add_argument('--mode', choices=['train', 'play', 'vtrain', 'play2'], default='train')
 parser.add_argument('--load_path')
-parser.add_argument('--rnn_steps', type=int, default=10)
-parser.add_argument('--memory_steps', type=int, default=3)
-parser.add_argument('--rnn', action='store_true', default=False)
-parser.add_argument('--hidden_size', default='[20,20]')
-parser.add_argument('--wait', type=float, default=.015)
-parser.add_argument('--exploration_strategy', choices=['semi_uniform_distributed', 'e_greedy',
-                                                       'boltzmann_distributed'], default='semi_uniform_distributed')
-parser.add_argument('--exploration_params', type=float, default=.1)
-parser.add_argument('--seed', type=int, default=1337)
-
-parser.add_argument('environment')
-
 
 args = parser.parse_args()
 
@@ -59,11 +65,6 @@ if not os.path.exists(args.save_path):
 
 
 def train(dddpg):
-    prestates = []
-    actions = []
-    rewards = []
-    poststates = []
-    terminals = []
 
     total_reward = 0
     total_rewards = []
@@ -77,8 +78,8 @@ def train(dddpg):
         episode_reward = 0
         update_exploration(args)
         for t in range(args.max_timesteps):
-            if args.display:
-                env.render()
+            # if args.display:
+            #     env.render()
 
             if timestep < args.replay_start_size:
                 action = env.action_space.sample()  # pure random
@@ -93,47 +94,24 @@ def train(dddpg):
                 if args.verbose > 0:
                     print("e:", i_episode, "e.t:", t, "action:", action, "q:", q)
 
-            if len(prestates) >= args.replay_memory_size:
-                delidx = np.random.randint(0, len(prestates) - 1 - args.batch_size)
-                del prestates[delidx]
-                del actions[delidx]
-                del rewards[delidx]
-                del poststates[delidx]
-                del terminals[delidx]
-
-            prestates.append(observation)
-            actions.append(action)
+            replay_holder = ReplayHolder(observation, action)
 
             observation, reward, done, info = env.step(action)
             observation = get_state(observation)
+
+            replay_holder.complete(reward, observation, done)
+            dddpg.add_to_replay(replay_holder)
+
             episode_reward += reward
             if args.verbose > 1:
                 print("reward:", reward)
-
-            rewards.append(reward)
-            poststates.append(observation)
-            terminals.append(done)
 
             timestep += 1
 
             if timestep > args.replay_start_size and i_episode % args.save_frequency >= 10:
                 if timestep % args.update_frequency == 0:
                     for k in xrange(args.train_repeat):
-                        if len(prestates) > args.batch_size:
-                            indexes = np.random.randint(len(prestates), size=args.batch_size)
-                        else:
-                            indexes = range(len(prestates))
-
-                        pre_sample = np.array([prestates[i] for i in indexes])
-                        post_sample = np.array([poststates[i] for i in indexes])
-                        qpre = dddpg.model.predict(pre_sample)
-                        qpost = dddpg.target_model.predict(post_sample)
-                        for i in xrange(len(indexes)):
-                            if terminals[indexes[i]]:
-                                qpre[i, actions[indexes[i]]] = rewards[indexes[i]]
-                            else:
-                                qpre[i, actions[indexes[i]]] = rewards[indexes[i]] + args.gamma * np.amax(qpost[i])
-                        dddpg.model.train_on_batch(pre_sample, qpre)
+                        dddpg.train_on_batch()
                         learning_steps += 1
 
                 if timestep % args.target_net_update_frequency == 0:

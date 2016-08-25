@@ -6,13 +6,21 @@ from keras import backend as K
 import cPickle
 import os
 import numpy as np
-from duel_aux import ReplayHolder
+from ddpg.sumtree import SumTree
+
+
+class TrainingParameters:
+    def __init__(self, args):
+        self.batch_size = args.batch_size
+        self.prioritize = args.prioritize
+        self.train_repeat = args.train_repeat
+        self.replay_size = args.replay_size
+        self.gamma = args.gamma
 
 
 class DuelingModel:
 
     class ModelParameters:
-
         def __init__(self, args):
             self.rnn = args.rnn  # bool - is the model recurrent?
             self.optimizer = args.optimizer
@@ -28,34 +36,66 @@ class DuelingModel:
     def __init__(self, args, env):
         self.env = env
         self.memory_steps = args.memory_steps
-        self.params = self.ModelParameters(args)
-        self.model, self.target_model = create_models(self. params, args.load_path)
+        self.model_params = self.ModelParameters(args)
+        self.training_params = TrainingParameters(args)
+        self.model, self.target_model = create_models(self.model_params, args.load_path)
 
+        # self.replay = SumTree()
         self.replay = []
+        self.replay_index = None
 
+    def replay_batch(self):
+        batch_size = self.training_params.batch_size
+        # ixs = []
+        # if self.training_params.prioritize:
+        #     sum_all = self.replay.tree[0].sum
+        #     for i in range(batch_size):
+        #         sample_value = sum_all / batch_size * (i + np.random.rand())
+        #         ixs.append(self.replay.sample(sample_value))
+        #     holders = [self.replay.tree[ix].pointer for ix in ixs]
+        #     return holders
+        # else:
+        #     for i in range(batch_size):
+        #         ixs.append(self.replay.sample_random())
+        #     return [self.replay.tree[ix].pointer for ix in ixs]
 
-    # def train_on_batch(self, args):
-    #
-    #
-    #     for k in xrange(args.train_repeat):
-    #         if len(prestates) > args.batch_size:
-    #             indexes = np.random.randint(len(prestates), size=args.batch_size)
-    #         else:
-    #             indexes = range(len(prestates))
-    #
-    #         pre_sample = np.array([prestates[i] for i in indexes])
-    #         post_sample = np.array([poststates[i] for i in indexes])
-    #         qpre = dddpg.model.predict(pre_sample)
-    #         qpost = dddpg.target_model.predict(post_sample)
-    #         for i in xrange(len(indexes)):
-    #             if terminals[indexes[i]]:
-    #                 qpre[i, actions[indexes[i]]] = rewards[indexes[i]]
-    #             else:
-    #                 qpre[i, actions[indexes[i]]] = rewards[indexes[i]] + args.gamma * np.amax(qpost[i])
-    #         dddpg.model.train_on_batch(pre_sample, qpre)
-    #         learning_steps += 1
+        ixs = np.random.choice(len(self.replay), size=batch_size)
+        return [self.replay[ix] for ix in ixs]
 
+    def train_on_batch(self):
 
+        batch = self.replay_batch()
+        for k in xrange(self.training_params.train_repeat):
+            pre_sample = np.array([h.s_t for h in batch])
+            post_sample = np.array([h.s_tp1 for h in batch])
+            qpre = self.model.predict(pre_sample)
+            qpost = self.target_model.predict(post_sample)
+            for i in xrange(len(batch)):
+                if batch[i].last:
+                    qpre[i, batch[i].a_t] = batch[i].r_t
+                else:
+                    qpre[i, batch[i].a_t] = batch[i].r_t + self.training_params.gamma * np.amax(qpost[i])
+            self.model.train_on_batch(pre_sample, qpre)
+
+    def add_to_replay(self, h):
+        self.replay.append(h)
+        # if np.isnan(h.r_t):
+        #     print 'nan in reward (!)'
+        #     return
+        #
+        # try:
+        #     h.delta = self.replay.tree[0].sum/self.training_params.batch_size  # make sure it'll be sampled once
+        # except IndexError:
+        #     pass  # first pass
+        # if len(self.replay.tree) >= self.training_params.replay_size:
+        #     if self.replay_index is None:
+        #         self.replay_index = self.replay.last_ixs()
+        #     ix = self.replay_index.next()
+        #     self.replay.tree[ix].pointer = h
+        #     self.replay.tree[ix].sum = h.delta
+        #     self.replay.update(ix)
+        # else:
+        #     self.replay.add_node(h)
 
 
 def create_models(params, load_path):
@@ -185,7 +225,6 @@ def update_exploration(args):
 
 
 # ===========================================================
-
 
 
 def heap_update(self):

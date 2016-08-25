@@ -1,15 +1,16 @@
 
 class ReplayHolder:
     """Container used in replay memory"""
-    def __init__(self, s_t, a_t, last=False):
+    def __init__(self, s_t, a_t):
         self.s_t = s_t
         self.a_t = a_t
         self.r_t = 0.
         self.s_tp1 = s_t
-        self.last = last
+        self.last = False
         self.delta = 1.
 
-    def complete(self, r_t, s_tp1):
+    def complete(self, r_t, s_tp1, last):
+        self.last = last
         self.r_t = r_t
         self.s_tp1 = s_tp1
 
