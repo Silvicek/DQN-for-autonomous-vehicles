@@ -1,5 +1,5 @@
 from keras.models import Model, Sequential
-from keras.layers import Input, Dense, Lambda, LSTM, GRU, TimeDistributed
+from keras.layers import Input, Dense, Lambda, LSTM, GRU, TimeDistributed, Merge
 from keras.layers.normalization import BatchNormalization
 from keras import initializations
 from keras import backend as K
@@ -154,6 +154,7 @@ def create_models(params, load_path):
 
 def create_layers(params):
     custom_init = lambda shape, name: initializations.normal(shape, scale=0.01, name=name)
+    w = Input(shape=(1,))
     if params.rnn:
         x = Input(shape=(params.rnn_steps,) + params.observation_space_shape)
     else:
@@ -167,8 +168,7 @@ def create_layers(params):
             if i == params.layers-1:
                 h = GRU(hidden_size, activation=params.activation, init=custom_init)(h)
             else:
-                # activation = args.activation
-                h = TimeDistributed(Dense(hidden_size, init=custom_init))(h)
+                h = TimeDistributed(Dense(hidden_size, activation=params.activation, init=custom_init))(h)
         else:
             h = Dense(hidden_size, activation=params.activation, init=custom_init)(h)
 
@@ -176,6 +176,7 @@ def create_layers(params):
             h = BatchNormalization()(h)
     n = params.action_space_size
     y = Dense(n + 1)(h)
+
     if params.advantage == 'avg':
         z = Lambda(lambda a: K.expand_dims(a[:, 0], dim=-1) + a[:, 1:] - K.mean(a[:, 1:], keepdims=True),
                    output_shape=(n,))(y)
@@ -187,7 +188,10 @@ def create_layers(params):
     else:
         assert False
 
-    return x, z
+    print n
+    p = Merge(mode='mul')([z, w])
+
+    return x, p
 
 
 def save(args, folder_name, target_model):

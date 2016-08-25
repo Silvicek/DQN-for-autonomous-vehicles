@@ -41,9 +41,9 @@ parser.add_argument('--rnn', action='store_true', default=False)
 parser.add_argument('--hidden_size', default='[20,20]')
 
 # ========== OTHER PARAMETERS
-parser.add_argument('environment')
 # parser.add_argument('--environment', type=str, default='ACar-v0')
-# parser.add_argument('--environment', type=str, default='CartPole-v0')
+parser.add_argument('--environment', type=str, default='CartPole-v0')
+# parser.add_argument('environment')
 parser.add_argument('--verbose', type=int, default=0)
 parser.add_argument('--display', action='store_true', default=True)
 parser.add_argument('--no_display', dest='display', action='store_false')
