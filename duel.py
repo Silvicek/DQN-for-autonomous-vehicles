@@ -41,9 +41,9 @@ parser.add_argument('--rnn', action='store_true', default=False)
 parser.add_argument('--hidden_size', default='[20,20]')
 
 # ========== OTHER PARAMETERS
-# parser.add_argument('environment')
+parser.add_argument('environment')
 # parser.add_argument('--environment', type=str, default='ACar-v0')
-parser.add_argument('--environment', type=str, default='CartPole-v0')
+# parser.add_argument('--environment', type=str, default='CartPole-v0')
 parser.add_argument('--verbose', type=int, default=0)
 parser.add_argument('--display', action='store_true', default=True)
 parser.add_argument('--no_display', dest='display', action='store_false')
@@ -65,6 +65,8 @@ if not os.path.exists(args.save_path):
 
 
 def train(dddpg):
+    # import time
+    # start = time.time()
 
     total_reward = 0
     total_rewards = []
@@ -113,6 +115,10 @@ def train(dddpg):
                     for k in xrange(args.train_repeat):
                         dddpg.train_on_batch()
                         learning_steps += 1
+                        # if learning_steps > 100000:
+                        #     print 'TIME=', time.time() - start
+                        #     import sys
+                        #     sys.exit()
 
                 if timestep % args.target_net_update_frequency == 0:
                     if args.verbose > 0:

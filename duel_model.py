@@ -40,62 +40,100 @@ class DuelingModel:
         self.training_params = TrainingParameters(args)
         self.model, self.target_model = create_models(self.model_params, args.load_path)
 
-        # self.replay = SumTree()
-        self.replay = []
+        self.replay = SumTree()
+        # self.replay = []
         self.replay_index = None
 
     def replay_batch(self):
         batch_size = self.training_params.batch_size
-        # ixs = []
-        # if self.training_params.prioritize:
-        #     sum_all = self.replay.tree[0].sum
-        #     for i in range(batch_size):
-        #         sample_value = sum_all / batch_size * (i + np.random.rand())
-        #         ixs.append(self.replay.sample(sample_value))
-        #     holders = [self.replay.tree[ix].pointer for ix in ixs]
-        #     return holders
-        # else:
-        #     for i in range(batch_size):
-        #         ixs.append(self.replay.sample_random())
-        #     return [self.replay.tree[ix].pointer for ix in ixs]
+        ixs = []
+        if self.training_params.prioritize:
+            sum_all = self.replay.tree[0].sum
+            for i in range(batch_size):
+                sample_value = sum_all / batch_size * (i + np.random.rand())
+                ixs.append(self.replay.sample(sample_value))
+            holders = [self.replay.tree[ix].pointer for ix in ixs]
+            return holders
+        else:
+            for i in range(batch_size):
+                ixs.append(self.replay.sample_random())
+            return [self.replay.tree[ix].pointer for ix in ixs]
 
-        ixs = np.random.choice(len(self.replay), size=batch_size)
-        return [self.replay[ix] for ix in ixs]
+        # ixs = np.random.choice(len(self.replay), size=batch_size)
+        # return [self.replay[ix] for ix in ixs]
 
     def train_on_batch(self):
 
         batch = self.replay_batch()
-        for k in xrange(self.training_params.train_repeat):
-            pre_sample = np.array([h.s_t for h in batch])
-            post_sample = np.array([h.s_tp1 for h in batch])
-            qpre = self.model.predict(pre_sample)
-            qpost = self.target_model.predict(post_sample)
-            for i in xrange(len(batch)):
-                if batch[i].last:
-                    qpre[i, batch[i].a_t] = batch[i].r_t
-                else:
-                    qpre[i, batch[i].a_t] = batch[i].r_t + self.training_params.gamma * np.amax(qpost[i])
-            self.model.train_on_batch(pre_sample, qpre)
+        pre_sample = np.array([h.s_t for h in batch])
+        post_sample = np.array([h.s_tp1 for h in batch])
+        qpre = self.model.predict(pre_sample)
+        qpost = self.target_model.predict(post_sample)
+        for i in xrange(len(batch)):
+            if batch[i].last:
+                qpre[i, batch[i].a_t] = batch[i].r_t
+            else:
+                qpre[i, batch[i].a_t] = batch[i].r_t + self.training_params.gamma * np.amax(qpost[i])
+        self.model.train_on_batch(pre_sample, qpre)
 
     def add_to_replay(self, h):
-        self.replay.append(h)
-        # if np.isnan(h.r_t):
-        #     print 'nan in reward (!)'
-        #     return
-        #
-        # try:
-        #     h.delta = self.replay.tree[0].sum/self.training_params.batch_size  # make sure it'll be sampled once
-        # except IndexError:
-        #     pass  # first pass
-        # if len(self.replay.tree) >= self.training_params.replay_size:
-        #     if self.replay_index is None:
-        #         self.replay_index = self.replay.last_ixs()
-        #     ix = self.replay_index.next()
-        #     self.replay.tree[ix].pointer = h
-        #     self.replay.tree[ix].sum = h.delta
-        #     self.replay.update(ix)
-        # else:
-        #     self.replay.add_node(h)
+        # self.replay.append(h)
+        if np.isnan(h.r_t):
+            print 'nan in reward (!)'
+            return
+
+        try:
+            h.delta = self.replay.tree[0].sum/self.training_params.batch_size  # make sure it'll be sampled once
+        except IndexError:
+            pass  # first pass
+        if len(self.replay.tree) >= self.training_params.replay_size:
+            if self.replay_index is None:
+                self.replay_index = self.replay.last_ixs()
+            ix = self.replay_index.next()
+            self.replay.tree[ix].pointer = h
+            self.replay.tree[ix].sum = h.delta
+            self.replay.update(ix)
+        else:
+            self.replay.add_node(h)
+
+    def prioritize(self, s, a, y, batch, prioritize):
+        """Output weights for prioritizing bias compensation"""
+        if self.is_rnn:
+            s = s[:, -1]
+        if prioritize:
+            delta = (self.fwp_critic(s, a).flatten() - y)
+            p_total = self.R.tree[0].sum
+            p = np.array([h.delta for h in batch]) / p_total
+            w = 1. / p
+            w /= np.max(w)
+            for i, h, d in zip(range(len(batch)), batch, delta):
+                h.delta = np.nan_to_num(np.abs(d))  # catch nans
+        else:
+            w = np.ones(len(batch))
+        return w
+
+    def heap_update(self):
+        """Every n steps, recalculate deltas in the sumtree"""
+        print 'SumTree pre-update:', self.R.tree[0].sum
+        last_ixs = self.R.last_ixs(True)
+        while True:
+            if len(last_ixs) == 0:
+                break
+            if len(last_ixs) < 10000:
+                ixs = last_ixs
+                last_ixs = []
+            else:
+                ixs = last_ixs[:10000]
+                last_ixs = last_ixs[10000:]
+            batch = [self.R.tree[ix].pointer for ix in ixs]
+            s = np.array([h.s_t for h in batch])
+            a = np.array([h.a_t for h in batch])
+            y = self._y(batch)
+            self.prioritize(s, a, y, batch, True)
+            for ix in ixs:
+                self.R.update(ix)
+        print 'SumTree post-update:', self.R.tree[0].sum
+        print 'SumTree updated'
 
 
 def create_models(params, load_path):
