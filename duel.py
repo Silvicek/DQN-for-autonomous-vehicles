@@ -5,8 +5,8 @@ import numpy as np
 from scipy.ndimage.interpolation import shift
 import os
 import time
-from duel_aux import bcolors, print_results
-from duel_model import create_models, save, load, sample, update_exploration
+from duel_aux import bcolors, print_results, ReplayHolder
+from duel_model import create_models, save, load, sample, update_exploration, DuelingModel
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--verbose', type=int, default=0)
@@ -40,9 +40,10 @@ parser.add_argument('--memory_steps', type=int, default=3)
 parser.add_argument('--rnn', action='store_true', default=False)
 parser.add_argument('--hidden_size', default='[20,20]')
 parser.add_argument('--wait', type=float, default=.015)
-parser.add_argument('--exploration_strategy', choices=['semi_uniform_distributed',
+parser.add_argument('--exploration_strategy', choices=['semi_uniform_distributed', 'e_greedy',
                                                        'boltzmann_distributed'], default='semi_uniform_distributed')
 parser.add_argument('--exploration_params', type=float, default=.1)
+parser.add_argument('--seed', type=int, default=1337)
 
 parser.add_argument('environment')
 
@@ -51,14 +52,13 @@ args = parser.parse_args()
 
 assert isinstance(args.hidden_size, str)
 args.hidden_size = eval(args.hidden_size)
-args.layers = len(args.hidden_size)
 
 if not os.path.exists(args.save_path):
     print 'Creating model directory', args.save_path
     os.makedirs(args.save_path)
 
 
-def train():
+def train(dddpg):
     prestates = []
     actions = []
     rewards = []
@@ -86,10 +86,10 @@ def train():
                     print("e:", i_episode, "e.t:", t, "action:", action, "random")
             else:
                 if test_now(i_episode):
-                    q = target_model.predict(np.array([observation]), batch_size=1)
+                    q = dddpg.target_model.predict(np.array([observation]), batch_size=1)
                 else:
-                    q = model.predict(np.array([observation]), batch_size=1)
-                action = sample(args, q)
+                    q = dddpg.model.predict(np.array([observation]), batch_size=1)
+                action = sample(args, q[0])
                 if args.verbose > 0:
                     print("e:", i_episode, "e.t:", t, "action:", action, "q:", q)
 
@@ -126,21 +126,21 @@ def train():
 
                         pre_sample = np.array([prestates[i] for i in indexes])
                         post_sample = np.array([poststates[i] for i in indexes])
-                        qpre = model.predict(pre_sample)
-                        qpost = target_model.predict(post_sample)
+                        qpre = dddpg.model.predict(pre_sample)
+                        qpost = dddpg.target_model.predict(post_sample)
                         for i in xrange(len(indexes)):
                             if terminals[indexes[i]]:
                                 qpre[i, actions[indexes[i]]] = rewards[indexes[i]]
                             else:
                                 qpre[i, actions[indexes[i]]] = rewards[indexes[i]] + args.gamma * np.amax(qpost[i])
-                        model.train_on_batch(pre_sample, qpre)
+                        dddpg.model.train_on_batch(pre_sample, qpre)
                         learning_steps += 1
 
                 if timestep % args.target_net_update_frequency == 0:
                     if args.verbose > 0:
                         print('learned on batch:', learning_steps, 'DDQN: Updating weights')
-                    weights = model.get_weights()
-                    target_model.set_weights(weights)
+                    weights = dddpg.model.get_weights()
+                    dddpg.target_model.set_weights(weights)
 
             if done:
                 break
@@ -158,10 +158,10 @@ def train():
             avg_r = float(np.mean(total_rewards[-9:]))
             print bcolors.YELLOW + 'Average reward (after %i learning steps): %.2f (best is %.2f)' % (learning_steps, avg_r, best_reward) + bcolors.ENDC
             folder_name = args.environment+'_'+str(i_episode)+str('_%.2f' % avg_r)
-            save(args, folder_name, target_model)
+            save(args, folder_name, dddpg.target_model)
             if avg_r > best_reward:
                 best_reward = avg_r
-                save(args, 'best_model', target_model)
+                save(args, 'best_model', dddpg.target_model)
 
     print("Average reward per episode {}".format(total_reward / args.episodes))
     print_results(best_reward, args)
@@ -188,7 +188,7 @@ def play():
             s = np.array([observation])
             q = target_model.predict(s, batch_size=1)
 
-            action = sample(args, q)  # TODO: make sure this isn't too random
+            action = sample(args, q[0])  # TODO: make sure this isn't too random
             if args.verbose > 0:
                 print("e:", i_episode, "e.t:", t, "action:", action, "q:", q)
 
@@ -236,8 +236,9 @@ def reset_environment():
 
 
 if __name__ == '__main__':
-    np.random.seed(1337)
+    np.random.seed(args.seed)
     env = gym.make(args.environment)
+    args_l = args
     if args.load_path:
         _, _, args_l = load(args.load_path, models=False)
         args.action_space_size = args_l.action_space_size
@@ -257,12 +258,10 @@ if __name__ == '__main__':
     if args.gym_record:
         env.monitor.start(args.gym_record, force=True)
 
-    if args.load_path:
-        model, target_model, _ = load(args.load_path)
-    else:
-        model, target_model = create_models(args)
+    dddpg = DuelingModel(args_l, args.load_path)
+
     if 'train' in args.mode:
-        train()
+        train(dddpg)
     else:
         play()
 
