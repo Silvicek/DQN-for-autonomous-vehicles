@@ -1,5 +1,5 @@
 from keras.models import Model, Sequential
-from keras.layers import Input, Dense, Lambda, LSTM, GRU, TimeDistributed
+from keras.layers import Input, Dense, Lambda, LSTM, GRU, TimeDistributed, Merge
 from keras.layers.normalization import BatchNormalization
 from keras import initializations
 from keras import backend as K
@@ -40,30 +40,27 @@ class DuelingModel:
         self.training_params = TrainingParameters(args)
         self.model, self.target_model = create_models(self.model_params, args.load_path)
 
-        # self.replay = SumTree()
-        self.replay = []
+        if self.training_params.prioritize:
+            self.replay = SumTree()
+        else:
+            self.replay = []
         self.replay_index = None
 
     def replay_batch(self):
         batch_size = self.training_params.batch_size
-        # ixs = []
-        # if self.training_params.prioritize:
-        #     sum_all = self.replay.tree[0].sum
-        #     for i in range(batch_size):
-        #         sample_value = sum_all / batch_size * (i + np.random.rand())
-        #         ixs.append(self.replay.sample(sample_value))
-        #     holders = [self.replay.tree[ix].pointer for ix in ixs]
-        #     return holders
-        # else:
-        #     for i in range(batch_size):
-        #         ixs.append(self.replay.sample_random())
-        #     return [self.replay.tree[ix].pointer for ix in ixs]
-
-        ixs = np.random.choice(len(self.replay), size=batch_size)
-        return [self.replay[ix] for ix in ixs]
+        ixs = []
+        if self.training_params.prioritize:
+            sum_all = self.replay.tree[0].sum
+            for i in range(batch_size):
+                sample_value = sum_all / batch_size * (i + np.random.rand())
+                ixs.append(self.replay.sample(sample_value))
+            holders = [self.replay.tree[ix].pointer for ix in ixs]
+            return holders
+        else:
+            ixs = np.random.choice(len(self.replay), size=batch_size)
+            return [self.replay[ix] for ix in ixs]
 
     def train_on_batch(self):
-
         batch = self.replay_batch()
         for k in xrange(self.training_params.train_repeat):
             pre_sample = np.array([h.s_t for h in batch])
@@ -75,6 +72,8 @@ class DuelingModel:
                     qpre[i, batch[i].a_t] = batch[i].r_t
                 else:
                     qpre[i, batch[i].a_t] = batch[i].r_t + self.training_params.gamma * np.amax(qpost[i])
+            batch_shape = qpre.shape
+            # print batch_shape
             self.model.train_on_batch(pre_sample, qpre)
 
     def add_to_replay(self, h):
