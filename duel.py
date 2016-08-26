@@ -14,7 +14,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--batch_size', type=int, default=32)
 parser.add_argument('--batch_norm', action="store_true", default=False)
 parser.add_argument('--no_batch_norm', action="store_false", dest='batch_norm')
-parser.add_argument('--replay_start_size', type=int, default=5000)
+parser.add_argument('--replay_start_size', type=int, default=500)  # TODO: rename
 parser.add_argument('--train_repeat', type=int, default=10)
 parser.add_argument('--gamma', type=float, default=0.99)
 parser.add_argument('--episodes', type=int, default=20000)
@@ -27,6 +27,7 @@ parser.add_argument('--save_frequency', type=int, default=100)
 parser.add_argument('--max_timesteps', type=int, default=1500)
 
 parser.add_argument('--prioritize', action="store_true", default=False)
+parser.add_argument('--update_tree_interval', type=int, default=100000)
 
 parser.add_argument('--exploration_params', type=float, default=.1)
 parser.add_argument('--exploration_strategy', choices=['semi_uniform_distributed', 'e_greedy',
@@ -42,8 +43,8 @@ parser.add_argument('--hidden_size', default='[20,20]')
 
 # ========== OTHER PARAMETERS
 # parser.add_argument('--environment', type=str, default='ACar-v0')
-parser.add_argument('--environment', type=str, default='CartPole-v0')
-# parser.add_argument('environment')
+# parser.add_argument('--environment', type=str, default='CartPole-v0')
+parser.add_argument('environment')
 parser.add_argument('--verbose', type=int, default=0)
 parser.add_argument('--display', action='store_true', default=True)
 parser.add_argument('--no_display', dest='display', action='store_false')
@@ -115,6 +116,8 @@ def train(dddpg):
                     for k in xrange(args.train_repeat):
                         dddpg.train_on_batch()
                         learning_steps += 1
+                        if learning_steps % args.update_tree_interval == 0:
+                            dddpg.heap_update()
                         # if learning_steps > 100000:
                         #     print 'TIME=', time.time() - start
                         #     import sys
