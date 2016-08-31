@@ -14,7 +14,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--batch_size', type=int, default=32)
 parser.add_argument('--batch_norm', action="store_true", default=False)
 parser.add_argument('--no_batch_norm', action="store_false", dest='batch_norm')
-parser.add_argument('--replay_start_size', type=int, default=500)  # TODO: rename
+parser.add_argument('--training_start_size', type=int, default=5000)  # TODO: rename
 parser.add_argument('--train_repeat', type=int, default=10)
 parser.add_argument('--gamma', type=float, default=0.99)
 parser.add_argument('--episodes', type=int, default=20000)
@@ -71,8 +71,8 @@ def train(dddpg):
 
     total_reward = 0
     total_rewards = []
-    timestep = 0
-    learning_steps = 0
+    step = 0
+    learning_steps = 1
 
     best_reward = -999.
 
@@ -81,10 +81,8 @@ def train(dddpg):
         episode_reward = 0
         update_exploration(args)
         for t in range(args.max_timesteps):
-            # if args.display:
-            #     env.render()
 
-            if timestep < args.replay_start_size:
+            if step < args.training_start_size:
                 action = env.action_space.sample()  # pure random
                 if args.verbose > 0:
                     print("e:", i_episode, "e.t:", t, "action:", action, "random")
@@ -103,27 +101,25 @@ def train(dddpg):
             observation = get_state(observation)
 
             replay_holder.complete(reward, observation, done)
-            dddpg.add_to_replay(replay_holder)
+            dddpg.add_to_replay(replay_holder, step >= args.training_start_size)
 
             episode_reward += reward
             if args.verbose > 1:
                 print("reward:", reward)
 
-            timestep += 1
+            step += 1
+            if step == args.training_start_size:
+                print bcolors.OKBLUE + 'TRAINING STARTED' + bcolors.ENDC
 
-            if timestep > args.replay_start_size and i_episode % args.save_frequency >= 10:
-                if timestep % args.update_frequency == 0:
+            if step > args.training_start_size and i_episode % args.save_frequency >= 10:
+                if step % args.update_frequency == 0:
                     for k in xrange(args.train_repeat):
                         dddpg.train_on_batch()
                         learning_steps += 1
-                        if learning_steps % args.update_tree_interval == 0:
+                        if args.prioritize and learning_steps % args.update_tree_interval == 0:
                             dddpg.heap_update()
-                        # if learning_steps > 100000:
-                        #     print 'TIME=', time.time() - start
-                        #     import sys
-                        #     sys.exit()
 
-                if timestep % args.target_net_update_frequency == 0:
+                if step % args.target_net_update_frequency == 0:
                     if args.verbose > 0:
                         print('learned on batch:', learning_steps, 'DDQN: Updating weights')
                     weights = dddpg.model.get_weights()
