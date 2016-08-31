@@ -18,27 +18,31 @@ class TrainingParameters:
         self.gamma = args.gamma
 
 
+class ModelParameters:
+    def __init__(self, args):
+        self.rnn = args.rnn  # bool - is the model recurrent?
+        self.optimizer = args.optimizer
+        self.hidden_size = args.hidden_size
+        self.action_space_size = args.action_space_size
+        self.batch_norm = args.batch_norm
+        self.advantage = args.advantage
+        self.observation_space_shape = args.observation_space_shape
+        self.activation = args.activation
+
+        self.exploration_strategy = args.exploration_strategy
+
+
 class DuelingModel:
 
-    class ModelParameters:
-        def __init__(self, args):
-            self.rnn = args.rnn  # bool - is the model recurrent?
-            self.optimizer = args.optimizer
-            self.hidden_size = args.hidden_size
-            self.action_space_size = args.action_space_size
-            self.batch_norm = args.batch_norm
-            self.advantage = args.advantage
-            self.observation_space_shape = args.observation_space_shape
-            self.activation = args.activation
-
-            self.exploration_strategy = args.exploration_strategy
-
-    def __init__(self, args, env):
-        self.env = env
-        self.memory_steps = args.memory_steps
-        self.model_params = self.ModelParameters(args)
-        self.training_params = TrainingParameters(args)
-        self.model, self.target_model = create_models(self.model_params, args.load_path)
+    def __init__(self, args):
+        if args.load_path is None:
+            self.model_params = ModelParameters(args)
+            self.training_params = TrainingParameters(args)
+            self.model, self.target_model = create_models(self.model_params)
+        else:
+            self.model_params = args.model_params
+            self.training_params = args.training_params
+            self.model, self.target_model = create_models(self.model_params, args.load_path+'/weights')
 
         self.replay = SumTree()
         # self.replay = []
@@ -155,8 +159,35 @@ class DuelingModel:
         print 'SumTree post-update:', self.replay.tree[0].sum
         print 'SumTree updated'
 
+    def save(self, save_path, folder_name):
+        if not os.path.exists(save_path + folder_name):
+            os.makedirs(save_path + folder_name)
 
-def create_models(params, load_path):
+        self.target_model.save_weights(save_path + folder_name + '/weights', overwrite=True)
+        info = self.model_params, self.training_params
+        d_file = open(save_path + folder_name + '/model_params', 'wr')
+        cPickle.dump(info, d_file)
+        d_file.close()
+
+
+def load(load_path):  # [a for a in dir(obj) if not a.startswith('__') and not callable(getattr(obj,a))]
+    model_params, training_params = cPickle.load(open(load_path+'/model_params', 'r'))
+
+    class Bunch(object):
+        def __init__(self, adict):
+            self.__dict__.update(adict)
+
+    args = dict()
+
+    args['load_path'] = load_path
+    args['model_params'] = model_params
+    args['training_params'] = training_params
+
+    dddpg = DuelingModel(Bunch(args))
+    return dddpg
+
+
+def create_models(params, load_path=None):
     x, z = create_layers(params)
     model = Model(input=x, output=z)
     model.summary()
@@ -210,24 +241,24 @@ def create_layers(params):
     return x, z
 
 
-def save(args, folder_name, target_model):
-    if not os.path.exists(args.save_path + folder_name):
-        os.makedirs(args.save_path + folder_name)
+# def save(args, folder_name, target_model):
+#     if not os.path.exists(args.save_path + folder_name):
+#         os.makedirs(args.save_path + folder_name)
+#
+#     target_model.save_weights(args.save_path + folder_name + '/weights', overwrite=True)
+#     d_file = open(args.save_path + folder_name + '/args', 'wr')
+#     cPickle.dump(args, d_file)
+#     d_file.close()
 
-    target_model.save_weights(args.save_path + folder_name + '/weights', overwrite=True)
-    d_file = open(args.save_path + folder_name + '/args', 'wr')
-    cPickle.dump(args, d_file)
-    d_file.close()
 
-
-def load(load_path, models=True):
-    args = cPickle.load(open(load_path+'/args', 'r'))
-    if models:
-        args.load_path = load_path + '/weights'
-        model, target_model = create_models(args)
-        return model, target_model, args
-    else:
-        return None, None, args
+# def load(load_path, models=True):
+#     args = cPickle.load(open(load_path+'/args', 'r'))
+#     if models:
+#         args.load_path = load_path + '/weights'
+#         model, target_model = create_models(args)
+#         return model, target_model, args
+#     else:
+#         return None, None, args
 
 
 def sample(args, q, strategy=None):

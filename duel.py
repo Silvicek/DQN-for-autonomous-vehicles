@@ -6,7 +6,7 @@ from scipy.ndimage.interpolation import shift
 import os
 import time
 from duel_aux import bcolors, print_results, ReplayHolder
-from duel_model import create_models, save, load, sample, update_exploration, DuelingModel
+from duel_model import load, sample, update_exploration, DuelingModel
 
 parser = argparse.ArgumentParser()
 
@@ -141,10 +141,10 @@ def train(dddpg):
             avg_r = float(np.mean(total_rewards[-9:]))
             print bcolors.YELLOW + 'Average reward (after %i learning steps): %.2f (best is %.2f)' % (learning_steps, avg_r, best_reward) + bcolors.ENDC
             folder_name = args.environment+'_'+str(i_episode)+str('_%.2f' % avg_r)
-            save(args, folder_name, dddpg.target_model)
+            dddpg.save(args.save_path, folder_name)
             if avg_r > best_reward:
                 best_reward = avg_r
-                save(args, 'best_model', dddpg.target_model)
+                dddpg.save(args.save_path, 'best')
 
     print("Average reward per episode {}".format(total_reward / args.episodes))
     print_results(best_reward, args)
@@ -153,7 +153,7 @@ def train(dddpg):
         env.monitor.close()
 
 
-def play():
+def play(dddpg):
     if args.gym_record:
         env.monitor.start(directory=args.gym_record,
                           video_callable=lambda count: count % 1 == 0)
@@ -169,7 +169,7 @@ def play():
             if args.mode == 'play':
                 time.sleep(args.wait)
             s = np.array([observation])
-            q = target_model.predict(s, batch_size=1)
+            q = dddpg.target_model.predict(s, batch_size=1)
 
             action = sample(args, q[0])  # TODO: make sure this isn't too random
             if args.verbose > 0:
@@ -221,15 +221,15 @@ def reset_environment():
 if __name__ == '__main__':
     np.random.seed(args.seed)
     env = gym.make(args.environment)
-    args_l = args
-    if args.load_path:
-        _, _, args_l = load(args.load_path, models=False)
-        args.action_space_size = args_l.action_space_size
-        args.memory_steps = args_l.memory_steps
-
     env.configure(args)
     args.observation_space_shape = env.observation_space.shape
     args.action_space_size = env.action_space.n
+
+    if args.load_path:
+        dddpg = load(args.load_path)
+    else:
+        dddpg = DuelingModel(args)
+
     if args.rnn:
         full_state = np.zeros((args.rnn_steps,) + env.observation_space.shape)
     else:
@@ -241,10 +241,10 @@ if __name__ == '__main__':
     if args.gym_record:
         env.monitor.start(args.gym_record, force=True)
 
-    dddpg = DuelingModel(args_l, args.load_path)
+
 
     if 'train' in args.mode:
         train(dddpg)
     else:
-        play()
+        play(dddpg)
 
