@@ -6,7 +6,8 @@ from scipy.ndimage.interpolation import shift
 import os
 import time
 from duel_aux import bcolors, print_results, ReplayHolder
-from duel_model import load, sample, update_exploration, DuelingModel
+from duel_model import load, DuelingModel
+from exploration import get_strategy
 
 parser = argparse.ArgumentParser()
 
@@ -66,9 +67,6 @@ if not os.path.exists(args.save_path):
 
 
 def train(dddpg):
-    # import time
-    # start = time.time()
-
     total_reward = 0
     total_rewards = []
     step = 0
@@ -79,7 +77,8 @@ def train(dddpg):
     for i_episode in range(args.episodes):
         observation = get_state(reset_environment())
         episode_reward = 0
-        update_exploration(args)
+        exploration = get_strategy(args.exploration_strategy)
+        exploration.update(args)
         for t in range(args.max_timesteps):
 
             if step < args.training_start_size:
@@ -91,7 +90,7 @@ def train(dddpg):
                     q = dddpg.target_model.predict(np.array([observation]), batch_size=1)
                 else:
                     q = dddpg.model.predict(np.array([observation]), batch_size=1)
-                action = sample(args, q[0])
+                action = exploration.sample(q[0])
                 if args.verbose > 0:
                     print("e:", i_episode, "e.t:", t, "action:", action, "q:", q)
 
