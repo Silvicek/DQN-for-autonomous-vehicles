@@ -2,7 +2,7 @@ import numpy as np
 
 
 class ExplorationStrategy:
-    def update(self, change):
+    def update(self, args):
         raise NotImplementedError()
 
     def sample(self, q):
@@ -11,48 +11,79 @@ class ExplorationStrategy:
 
 class SemiUniformDistributed(ExplorationStrategy):
     def __init__(self, play):
-        self.starting_parameter_train = 0.1
+        self.starting_parameter_train = 0.3
         self.starting_parameter_play = 0.9
         self.ending_parameter = 0.9
         if play:
-            self.p_max = self.starting_parameter_play
+            self.parameter = self.starting_parameter_play
         else:
-            self.p_max = self.starting_parameter_train
+            self.parameter = self.starting_parameter_train
 
     def update(self, args):
-        if self.p_max >= 0.9:
+        if self.parameter >= self.ending_parameter:
             pass
         else:
-            self.p_max += 2. / args.episodes
+            self.parameter += 2. / args.episodes
 
     def sample(self, q):
         n = len(q)
         p_vector = np.ones(n)
-        p_vector *= (1. - self.p_max) / n
-        p_vector[np.argmax(q)] += self.p_max
+        p_vector *= (1. - self.parameter) / n
+        p_vector[np.argmax(q)] += self.parameter
         return np.random.choice(n, p=p_vector)
 
 
 class BoltzmannDistributed(ExplorationStrategy):
     def __init__(self, play):
-        self.starting_parameter_train = 0.1
-        self.starting_parameter_play = 0.9
-        self.ending_parameter = 0.9
+        self.starting_parameter_train = 2.
+        self.starting_parameter_play = 0.1
+        self.ending_parameter = 0.1
         if play:
-            self.theta = self.starting_parameter_play
+            self.parameter = self.starting_parameter_play
         else:
-            self.theta = self.starting_parameter_train
+            self.parameter = self.starting_parameter_train
 
     def update(self, args):  # TODO: values???
-        if self.theta >= 0.9:
+        if self.parameter >= self.ending_parameter:
             pass
         else:
-            self.theta += 2. / args.episodes
+            self.parameter += 2. / args.episodes
 
     def sample(self, q):
         n = len(q)
-        p_vector = softmax(q, 1. / self.theta)
+        p_vector = softmax(q, 1. / self.parameter)
         return np.random.choice(n, p=p_vector)
+
+
+class EpsilonGreedySpecial(ExplorationStrategy):
+    def __init__(self, play):
+        self.starting_parameter_train = 0.9
+        self.starting_parameter_play = 0.1
+        self.ending_parameter = 0.1
+        self.last_action = 0
+        if play:
+            self.parameter = self.starting_parameter_play
+        else:
+            self.parameter = self.starting_parameter_train
+
+    def update(self, args):
+        if self.parameter <= self.ending_parameter:
+            pass
+        else:
+            self.parameter -= 2. / args.episodes
+
+    def sample(self, q):
+        n = len(q)
+        if self.parameter <= np.random.random():
+            p_vector = np.ones(n)
+            p_vector *= 0.5 / n
+            p_vector[self.last_action] += 0.5
+            action = np.random.choice(n, p=p_vector)
+            self.last_action = action
+        else:
+            action = np.argmax(q)
+            self.last_action = action
+        return action
 
 
 def get_strategy(strategy, play=False):
@@ -60,21 +91,8 @@ def get_strategy(strategy, play=False):
         return SemiUniformDistributed(play)
     elif strategy == 'boltzmann_distributed':
         return BoltzmannDistributed(play)
-
-
-
-
-
-
-
-
-def e_greedy_sample(args, q):
-    e = args.exploration_params
-    n = args.action_space_size
-    if e <= np.random.random():
-        return np.random.choice(n)
-    else:
-        return np.argmax(q)
+    elif strategy == 'e_greedy':
+        return EpsilonGreedySpecial(play)
 
 
 def softmax(x, p=1.):
@@ -83,18 +101,4 @@ def softmax(x, p=1.):
     return np.exp(x*p) / np.sum(np.exp(x*p))
 
 
-def update_exploration(args):
-    e = args.exploration_params
-    mode = args.exploration_strategy
-
-    if mode == 'semi_uniform_distributed':
-        if e >= 0.9:
-            pass
-        else:
-            args.exploration_params += 2./args.episodes
-    elif mode == 'e_greedy':
-        if e <= 0.1:
-            pass
-        else:
-            args.exploration_params -= 2. / args.episodes
 

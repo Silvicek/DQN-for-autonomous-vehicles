@@ -15,12 +15,11 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--batch_size', type=int, default=32)
 parser.add_argument('--batch_norm', action="store_true", default=False)
 parser.add_argument('--no_batch_norm', action="store_false", dest='batch_norm')
-parser.add_argument('--training_start_size', type=int, default=5000)  # TODO: rename
+parser.add_argument('--training_start_size', type=int, default=5000)
 parser.add_argument('--train_repeat', type=int, default=10)
 parser.add_argument('--gamma', type=float, default=0.99)
 parser.add_argument('--episodes', type=int, default=20000)
 parser.add_argument('--optimizer', choices=['adam', 'rmsprop'], default='adam')
-parser.add_argument('--exploration', type=float, default=0.1)  # TODO: remove?
 parser.add_argument('--update_frequency', type=int, default=4)
 parser.add_argument('--target_net_update_frequency', type=int, default=32)
 parser.add_argument('--replay_size', type=int, default=100000)
@@ -73,26 +72,21 @@ def train(dddpg):
     learning_steps = 1
 
     best_reward = -999.
+    exploration = get_strategy(args.exploration_strategy)
 
     for i_episode in range(args.episodes):
         observation = get_state(reset_environment())
         episode_reward = 0
-        exploration = get_strategy(args.exploration_strategy)
         exploration.update(args)
         for t in range(args.max_timesteps):
 
-            if step < args.training_start_size:
-                action = env.action_space.sample()  # pure random
-                if args.verbose > 0:
-                    print("e:", i_episode, "e.t:", t, "action:", action, "random")
+            if test_now(i_episode):
+                q = dddpg.target_model.predict(np.array([observation]), batch_size=1)
             else:
-                if test_now(i_episode):
-                    q = dddpg.target_model.predict(np.array([observation]), batch_size=1)
-                else:
-                    q = dddpg.model.predict(np.array([observation]), batch_size=1)
-                action = exploration.sample(q[0])
-                if args.verbose > 0:
-                    print("e:", i_episode, "e.t:", t, "action:", action, "q:", q)
+                q = dddpg.model.predict(np.array([observation]), batch_size=1)
+            action = exploration.sample(q[0])
+            if args.verbose > 0:
+                print("e:", i_episode, "e.t:", t, "action:", action, "q:", q)
 
             replay_holder = ReplayHolder(observation, action)
 
@@ -158,6 +152,7 @@ def play(dddpg):
                           video_callable=lambda count: count % 1 == 0)
     total_reward = 0
     timestep = 0
+    exploration = get_strategy(args.exploration_strategy)
     for i_episode in range(args.episodes):
         observation = get_state(reset_environment())
         episode_reward = 0
@@ -170,7 +165,7 @@ def play(dddpg):
             s = np.array([observation])
             q = dddpg.target_model.predict(s, batch_size=1)
 
-            action = sample(args, q[0])  # TODO: make sure this isn't too random
+            action = exploration.sample(q[0])
             if args.verbose > 0:
                 print("e:", i_episode, "e.t:", t, "action:", action, "q:", q)
 

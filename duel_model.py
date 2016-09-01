@@ -241,6 +241,4 @@ def create_layers(params):
     return x, z
 
 
-# TODO: colors in env!
-
 
