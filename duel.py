@@ -139,7 +139,6 @@ def train(dddpg):
                 best_reward = avg_r
                 dddpg.save(args.save_path, 'best')
 
-    print("Average reward per episode {}".format(total_reward / args.episodes))
     print_results(best_reward, args)
 
     if args.gym_record:
@@ -162,6 +161,44 @@ def play(dddpg):
 
             if args.mode == 'play':
                 time.sleep(args.wait)
+            s = np.array([observation])
+            q = dddpg.target_model.predict(s, batch_size=1)
+
+            action = exploration.sample(q[0])
+            if args.verbose > 0:
+                print("e:", i_episode, "e.t:", t, "action:", action, "q:", q)
+
+            observation, reward, done, info = env.step(action)
+            observation = get_state(observation)
+            episode_reward += reward
+            if args.verbose > 1:
+                print("reward:", reward)
+
+            timestep += 1
+
+            if done:
+                break
+
+        episode_print = "Episode {} finished after {} timesteps, episode reward {}".format(i_episode + 1, t + 1,
+                                                                                           episode_reward)
+        if episode_reward > 0:
+            print bcolors.OKGREEN + episode_print + bcolors.ENDC
+        else:
+            print episode_print
+        total_reward += episode_reward
+
+    print("Average reward per episode {}".format(total_reward / args.episodes))
+
+
+def test(dddpg):  # TODO: finish
+    total_reward = 0
+    timestep = 0
+    exploration = get_strategy(args.exploration_strategy, play=True)
+    for i_episode in range(args.episodes):
+        observation = get_state(reset_environment())
+        episode_reward = 0
+        for t in range(args.max_timesteps):
+
             s = np.array([observation])
             q = dddpg.target_model.predict(s, batch_size=1)
 
@@ -234,8 +271,6 @@ if __name__ == '__main__':
 
     if args.gym_record:
         env.monitor.start(args.gym_record, force=True)
-
-
 
     if 'train' in args.mode:
         train(dddpg)
