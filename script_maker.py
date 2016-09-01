@@ -24,7 +24,7 @@ def go_through(xxx, params):
             go_through(xxx[1:], params + ' ' + arg + ' ' + str(val))
         else:
             i += 1
-            runs += params + ' ' + arg + ' ' + str(val) + ' ' + '--save_path models/'+str(i) + '/' + '&\n'
+            runs += params + ' ' + arg + ' ' + str(val) + ' ' + '--save_path models/'+str(i) + '/' + ' &\n'
 
 
 basic_args = 'python duel.py ACar-v0 --episodes 2011 --advantage max'
