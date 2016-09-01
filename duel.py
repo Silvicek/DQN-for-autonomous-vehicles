@@ -30,8 +30,8 @@ parser.add_argument('--prioritize', action="store_true", default=False)
 parser.add_argument('--update_tree_interval', type=int, default=100000)
 
 parser.add_argument('--exploration_params', type=float, default=.1)
-parser.add_argument('--exploration_strategy', choices=['semi_uniform_distributed', 'e_greedy',
-                                                       'boltzmann_distributed'], default='semi_uniform_distributed')
+parser.add_argument('--exploration_strategy', choices=['semi_uniform', 'e_greedy',
+                                                       'boltzmann'], default='semi_uniform')
 
 # ========== MODEL PARAMETERS
 parser.add_argument('--activation', choices=['tanh', 'relu'], default='tanh')

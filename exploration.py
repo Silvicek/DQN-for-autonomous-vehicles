@@ -57,8 +57,8 @@ class BoltzmannDistributed(ExplorationStrategy):
 
 class EpsilonGreedySpecial(ExplorationStrategy):
     def __init__(self, play):
-        self.starting_parameter_train = 0.9
-        self.starting_parameter_play = 0.1
+        self.starting_parameter_train = 1.
+        self.starting_parameter_play = 0.05
         self.ending_parameter = 0.1
         self.last_action = 0
         if play:
@@ -87,9 +87,9 @@ class EpsilonGreedySpecial(ExplorationStrategy):
 
 
 def get_strategy(strategy, play=False):
-    if strategy == 'semi_uniform_distributed':
+    if strategy == 'semi_uniform':
         return SemiUniformDistributed(play)
-    elif strategy == 'boltzmann_distributed':
+    elif strategy == 'boltzmann':
         return BoltzmannDistributed(play)
     elif strategy == 'e_greedy':
         return EpsilonGreedySpecial(play)
