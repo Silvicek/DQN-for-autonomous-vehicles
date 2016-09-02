@@ -58,7 +58,7 @@ class BoltzmannDistributed(ExplorationStrategy):
 class EpsilonGreedySpecial(ExplorationStrategy):
     def __init__(self, play):
         self.starting_parameter_train = 1.
-        self.starting_parameter_play = 0.05
+        self.starting_parameter_play = 0.1
         self.ending_parameter = 0.1
         self.last_action = 0
         if play:

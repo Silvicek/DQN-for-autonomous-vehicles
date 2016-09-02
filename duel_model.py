@@ -44,8 +44,11 @@ class DuelingModel:
             self.training_params = args.training_params
             self.model, self.target_model = create_models(self.model_params, args.load_path+'/weights')
 
-        self.replay = SumTree()
-        # self.replay = []
+        if self.training_params.prioritize:
+            self.replay = SumTree()
+        else:
+            self.replay = []
+
         self.replay_index = None
 
     def replay_batch(self):
@@ -59,9 +62,11 @@ class DuelingModel:
             holders = [self.replay.tree[ix].pointer for ix in ixs]
             return holders, ixs
         else:
-            for i in range(batch_size):
-                ixs.append(self.replay.sample_random())
-            return [self.replay.tree[ix].pointer for ix in ixs], ixs
+            ixs = np.random.choice(len(self.replay), size=batch_size)
+            return [self.replay[ix] for ix in ixs], ixs
+            # for i in range(batch_size):
+            #     ixs.append(self.replay.sample_random())
+            # return [self.replay.tree[ix].pointer for ix in ixs], ixs
 
         # ixs = np.random.choice(len(self.replay), size=batch_size)
         # return [self.replay[ix] for ix in ixs]
@@ -90,22 +95,23 @@ class DuelingModel:
         self.model.train_on_batch(pre_sample, qpre, sample_weight=w)
 
     def add_to_replay(self, h, training_started=False):
-        if np.isnan(h.r_t):
-            print 'nan in reward (!)'
-            return
-        if training_started:
-            h.delta = self.replay.tree[0].sum/self.training_params.batch_size  # make sure it'll be sampled once
+        if self.training_params.prioritize:
+            if training_started:
+                h.delta = self.replay.tree[0].sum/self.training_params.batch_size  # make sure it'll be sampled once
+            else:
+                h.delta = 1.
+            if len(self.replay.tree) >= self.training_params.replay_size:
+                if self.replay_index is None:
+                    self.replay_index = self.replay.last_ixs()
+                ix = self.replay_index.next()
+                self.replay.tree[ix].pointer = h
+                self.replay.tree[ix].sum = h.delta
+                self.replay.update(ix)
+            else:
+                self.replay.add_node(h)
         else:
-            h.delta = 1.
-        if len(self.replay.tree) >= self.training_params.replay_size:
-            if self.replay_index is None:
-                self.replay_index = self.replay.last_ixs()
-            ix = self.replay_index.next()
-            self.replay.tree[ix].pointer = h
-            self.replay.tree[ix].sum = h.delta
-            self.replay.update(ix)
-        else:
-            self.replay.add_node(h)
+            self.replay.append(h)
+
 
     def get_p_weights(self, delta, batch, batch_ixs):
         """Output weights for prioritizing bias compensation"""
