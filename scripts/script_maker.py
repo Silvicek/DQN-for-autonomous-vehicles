@@ -16,6 +16,7 @@ indices = range(len(args))
 
 runs = []
 
+cpu_usage = 4
 
 def go_through(xxx, params):
     global i, runs
@@ -25,7 +26,12 @@ def go_through(xxx, params):
             go_through(xxx[1:], params + ' ' + arg + ' ' + str(val))
         else:
             i += 1
-            runs.append(params + ' ' + arg + ' ' + str(val) + ' ' + '--save_path models/'+str(i) + '/' + ' &\n')
+            string = params + ' ' + arg + ' ' + str(val) + ' ' + '--save_path models/'+str(i) + '/'
+            if i % cpu_usage == 0:
+                string += ' \n'
+            else:
+                string += ' &\n'
+            runs.append(string)
 
 
 basic_args = 'python duel.py ACar-v0 --episodes 2011 --advantage max'
@@ -48,6 +54,7 @@ cd DQN-for-autonomous-vehicles
 
 j = 0
 
+
 while True:
     if len(runs[j*20:]) > 20:
         runz = ''.join(runs[j*20:j*20+20])
@@ -57,6 +64,7 @@ while True:
     script.write(script_preface + runz)
     script.close()
     j += 1
+
     if j*20 > len(runs):
         break
 
