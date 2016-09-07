@@ -2,42 +2,62 @@
 from deap import base, creator, tools, algorithms
 from scoop import futures
 import random
+import cPickle
 
-# basic_args = 'python duel.py ACar-v0 --episodes 2011 --advantage max'
-basic_args = 'duel.py ACar-v0 --episodes 2041'
+
+hidden_size = ('--hidden_size', ['[20,20]', '[50,50]'])
+memory_steps = ('--memory_steps', [0, 1, 3, 5])
+activation = ('--activation', ['tanh', 'relu'])
+strategy = ('--exploration_strategy', ['semi_uniform', 'boltzmann', 'e_greedy'])
+prioritize = ('', ['', '--prioritize'])
+advantage = ('--advantage', ['naive', 'max', 'avg'])
+
+args = (hidden_size, memory_steps, activation, strategy, prioritize, advantage)
+IND_SIZE = len(args)
 
 
 def individual_to_model(individual):
     def map_to_index(x, l, n=100):
         return int(float(x) / n * l)
 
-    hidden_size = ('--hidden_size', ['[20,20]', '[50,50]', '[100,100'])
-    memory_steps = ('--memory_steps', [0, 1, 3, 5])
-    activation = ('--activation', ['tanh', 'relu'])
-    strategy = ('--exploration_strategy', ['semi_uniform', 'boltzmann', 'e_greedy'])
-    prioritize = ('', ['', '--prioritize'])
-    advantage = ('--advantage', ['naive', 'max', 'avg'])
-
-    args = (hidden_size, memory_steps, activation, strategy, prioritize, advantage)
-
-    run_str = basic_args
+    run_str = ''
     for ind, arg in zip(individual, args):
         run_str += ' ' + arg[0] + ' ' + str(arg[1][map_to_index(ind, len(arg[1]))])
 
-    print run_str
+    return run_str
 
-ind = [16, 45, 80, 22, 62, 48]
 
-individual_to_model(ind)
+def read_results(path):
+    import csv
+    with open(path) as csvfile:
+        reader = csv.reader(csvfile, delimiter=',')
+        i = 0
+        for row in reader:
+            if i == 1:
+                return float(row[-5])
+            i += 1
 
 
 def evaluate(individual):
-    # Do some hard computing on the individual
-    a = sum(individual)
-    return a,
+    import string
+    import os
+    import subprocess
+    id_string = ''.join(random.choice(string.ascii_lowercase) for _ in range(5))
+    run_args = individual_to_model(individual)
+    run_args += ' --verbose -1 --seed 1337 --dont_save_models --save_path models/tests/ ' +\
+                '--episodes 41' + ' --result_id ' + id_string
 
+    full_run = 'python duel.py ACar-v0'+run_args
 
-IND_SIZE = 5
+    with open(os.devnull, 'wb') as devnull:
+        subprocess.check_call(full_run.split(), stdout=devnull, stderr=subprocess.STDOUT)
+
+    fitness = read_results('models/tests/'+id_string+'.csv')
+    print '-----------------------------'
+    print full_run
+    print 'fitness=', fitness
+    return fitness,
+
 
 creator.create("FitnessMax", base.Fitness, weights=(1.0,))
 creator.create("Individual", list, fitness=creator.FitnessMax)
@@ -58,7 +78,13 @@ toolbox.register('evaluate', evaluate)
 toolbox.register("population", tools.initRepeat, list, toolbox.individual)
 
 hof = tools.HallOfFame(maxsize=5)
-population, logbook = algorithms.eaSimple(toolbox.population(n=100), toolbox, halloffame=hof,
-                                          cxpb=0.5, mutpb=0.2, ngen=100)
+population, logbook = algorithms.eaSimple(toolbox.population(n=20), toolbox, halloffame=hof,
+                                          cxpb=0.5, mutpb=0.2, ngen=10, verbose=True)
 
-print hof
+
+print '============================================'
+print 'HALL OF FAME:'
+for ind in hof:
+    print ind.fitness.values[0], ind
+
+cPickle.dump(hof, open('models/tests/hall_of_fame.pkl', 'wr'))

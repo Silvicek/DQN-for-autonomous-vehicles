@@ -16,7 +16,8 @@ class ReplayHolder:
 
 
 def print_results(reward, args):
-    path = args.save_path+'/results.csv'
+    res = 'results.csv' if args.result_id is None else args.result_id+'.csv'
+    path = args.save_path+'/'+res
     args.reward = reward
     d = vars(args)
     import csv

@@ -196,7 +196,7 @@ def load(load_path):  # [a for a in dir(obj) if not a.startswith('__') and not c
 def create_models(params, load_path=None):
     x, z = create_layers(params)
     model = Model(input=x, output=z)
-    model.summary()
+    # model.summary()
     model.compile(optimizer=params.optimizer, loss='mse')
 
     x, z = create_layers(params)

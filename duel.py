@@ -53,6 +53,7 @@ parser.add_argument('--seed', type=int, default=1337)
 parser.add_argument('--save_path', type=str, default='models')
 parser.add_argument('--mode', choices=['train', 'play', 'vtrain', 'test'], default='train')
 parser.add_argument('--load_path')
+parser.add_argument('--result_id')
 
 parser.add_argument('--save_frequency', type=int, default=400)
 parser.add_argument('--test_episodes', type=int, default=40)
@@ -106,7 +107,7 @@ def train(dddpg):
                 print("reward:", reward)
 
             step += 1
-            if step == args.training_start_size:
+            if step == args.training_start_size and args.verbose >= 0:
                 print bcolors.OKBLUE + 'TRAINING STARTED' + bcolors.ENDC
 
             if step > args.training_start_size and i_episode % args.save_frequency >= 10:
@@ -118,8 +119,6 @@ def train(dddpg):
                             dddpg.heap_update()
 
                 if step % args.target_net_update_frequency == 0:
-                    if args.verbose > 0:
-                        print('learned on batch:', learning_steps, 'DDQN: Updating weights')
                     weights = dddpg.model.get_weights()
                     dddpg.target_model.set_weights(weights)
 
@@ -127,9 +126,9 @@ def train(dddpg):
                 break
 
         episode_print = "Episode {} finished after {} timesteps, episode reward {}".format(i_episode + 1, t + 1, episode_reward)
-        if episode_reward > 0:
+        if episode_reward > 0 and args.verbose >= 0:
             print bcolors.OKGREEN + episode_print + bcolors.ENDC
-        else:
+        elif args.verbose >= 0:
             print episode_print
 
         total_reward += episode_reward
@@ -137,7 +136,8 @@ def train(dddpg):
 
         if i_episode % args.save_frequency == args.test_episodes-1:
             avg_r = float(np.mean(total_rewards[-(args.test_episodes-1):]))
-            print bcolors.YELLOW + 'Average reward (after %i learning steps): %.2f (best is %.2f)' % (learning_steps, avg_r, best_reward) + bcolors.ENDC
+            if args.verbose >= 0:
+                print bcolors.YELLOW + 'Average reward (after %i learning steps): %.2f (best is %.2f)' % (learning_steps, avg_r, best_reward) + bcolors.ENDC
             folder_name = args.environment+'_'+str(i_episode)+str('_%.2f' % avg_r)
             if args.save_models:
                 dddpg.save(args.save_path, folder_name)
