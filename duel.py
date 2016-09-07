@@ -23,7 +23,6 @@ parser.add_argument('--optimizer', choices=['adam', 'rmsprop'], default='adam')
 parser.add_argument('--update_frequency', type=int, default=4)
 parser.add_argument('--target_net_update_frequency', type=int, default=32)
 parser.add_argument('--replay_size', type=int, default=100000)
-parser.add_argument('--save_frequency', type=int, default=100)
 parser.add_argument('--max_timesteps', type=int, default=1500)
 
 parser.add_argument('--prioritize', action="store_true", default=False)
@@ -52,8 +51,14 @@ parser.add_argument('--gym_record')
 parser.add_argument('--wait', type=float, default=.015)
 parser.add_argument('--seed', type=int, default=1337)
 parser.add_argument('--save_path', type=str, default='models')
-parser.add_argument('--mode', choices=['train', 'play', 'vtrain', 'play2'], default='train')
+parser.add_argument('--mode', choices=['train', 'play', 'vtrain', 'test'], default='train')
 parser.add_argument('--load_path')
+
+parser.add_argument('--save_frequency', type=int, default=400)
+parser.add_argument('--test_episodes', type=int, default=40)
+parser.add_argument('--save_models', action="store_true", default=True)
+parser.add_argument('--dont_save_models', action="store_false", dest='save_models')
+
 
 args = parser.parse_args()
 
@@ -130,14 +135,16 @@ def train(dddpg):
         total_reward += episode_reward
         total_rewards.append(episode_reward)
 
-        if i_episode % args.save_frequency == 9:
-            avg_r = float(np.mean(total_rewards[-9:]))
+        if i_episode % args.save_frequency == args.test_episodes-1:
+            avg_r = float(np.mean(total_rewards[-(args.test_episodes-1):]))
             print bcolors.YELLOW + 'Average reward (after %i learning steps): %.2f (best is %.2f)' % (learning_steps, avg_r, best_reward) + bcolors.ENDC
             folder_name = args.environment+'_'+str(i_episode)+str('_%.2f' % avg_r)
-            dddpg.save(args.save_path, folder_name)
+            if args.save_models:
+                dddpg.save(args.save_path, folder_name)
             if avg_r > best_reward:
                 best_reward = avg_r
-                dddpg.save(args.save_path, 'best')
+                if args.save_models:
+                    dddpg.save(args.save_path, 'best')
 
     print_results(best_reward, args)
 
@@ -152,6 +159,8 @@ def play(dddpg):
     total_reward = 0
     timestep = 0
     exploration = get_strategy(args.exploration_strategy)
+    stuck = 0.
+    successful = 0.
     for i_episode in range(args.episodes):
         observation = get_state(reset_environment())
         episode_reward = 0
@@ -175,57 +184,24 @@ def play(dddpg):
                 print("reward:", reward)
 
             timestep += 1
-
             if done:
                 break
 
         episode_print = "Episode {} finished after {} timesteps, episode reward {}".format(i_episode + 1, t + 1,
                                                                                            episode_reward)
+        if episode_reward < -130:
+            stuck += 1.
+
         if episode_reward > 0:
             print bcolors.OKGREEN + episode_print + bcolors.ENDC
+            successful += 1.
         else:
             print episode_print
         total_reward += episode_reward
 
     print("Average reward per episode {}".format(total_reward / args.episodes))
+    print("{}% success,  {}% stuck".format(100*successful / args.episodes, 100*stuck / args.episodes))
 
-
-def test(dddpg):  # TODO: finish
-    total_reward = 0
-    timestep = 0
-    exploration = get_strategy(args.exploration_strategy, play=True)
-    for i_episode in range(args.episodes):
-        observation = get_state(reset_environment())
-        episode_reward = 0
-        for t in range(args.max_timesteps):
-
-            s = np.array([observation])
-            q = dddpg.target_model.predict(s, batch_size=1)
-
-            action = exploration.sample(q[0])
-            if args.verbose > 0:
-                print("e:", i_episode, "e.t:", t, "action:", action, "q:", q)
-
-            observation, reward, done, info = env.step(action)
-            observation = get_state(observation)
-            episode_reward += reward
-            if args.verbose > 1:
-                print("reward:", reward)
-
-            timestep += 1
-
-            if done:
-                break
-
-        episode_print = "Episode {} finished after {} timesteps, episode reward {}".format(i_episode + 1, t + 1,
-                                                                                           episode_reward)
-        if episode_reward > 0:
-            print bcolors.OKGREEN + episode_print + bcolors.ENDC
-        else:
-            print episode_print
-        total_reward += episode_reward
-
-    print("Average reward per episode {}".format(total_reward / args.episodes))
 
 
 def test_now(i):
