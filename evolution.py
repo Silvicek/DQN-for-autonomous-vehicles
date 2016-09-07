@@ -45,7 +45,7 @@ def evaluate(individual):
     id_string = ''.join(random.choice(string.ascii_lowercase) for _ in range(5))
     run_args = individual_to_model(individual)
     run_args += ' --verbose -1 --seed 1337 --dont_save_models --save_path models/tests/ ' +\
-                '--episodes 41' + ' --result_id ' + id_string
+                '--episodes 2041' + ' --result_id ' + id_string
 
     full_run = 'python duel.py ACar-v0'+run_args
 
