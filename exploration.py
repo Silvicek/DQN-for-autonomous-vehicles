@@ -84,15 +84,15 @@ class ValueDirected(ExplorationStrategy):
         if n >= self.val_length:
             self.mean = self.mean + v/n - self.values[self.ix]/n
             self.values[self.ix] = v
-            if self.ix == n-1:
+            if self.ix == self.val_length-1:
                 self.ix = 0
+                print 'mean=', self.mean
             else:
                 self.ix += 1
         else:
             self.values.append(v)
             self.mean = self.mean * n/(n+1) + v/(n+1)
 
-        print self.mean
         # ===================================
         n = len(q)
         p_vector = np.ones(n)
