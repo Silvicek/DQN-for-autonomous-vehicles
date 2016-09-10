@@ -76,7 +76,7 @@ class DuelingModel:
         pre_sample = np.array([h.s_t for h in batch])
         post_sample = np.array([h.s_tp1 for h in batch])
         qpre = self.model.predict(pre_sample)
-        qpost = self.target_model.predict(post_sample)
+        _, qpost = self.target_model.predict(post_sample)
 
         q1 = np.zeros(qpre.shape[0])
         q2 = np.zeros_like(q1)
@@ -133,7 +133,7 @@ class DuelingModel:
         pre_sample = np.array([h.s_t for h in batch])
         post_sample = np.array([h.s_tp1 for h in batch])
         qpre = self.model.predict(pre_sample)
-        qpost = self.target_model.predict(post_sample)
+        _, qpost = self.target_model.predict(post_sample)
         q1 = np.zeros(qpre.shape[0])
         q2 = np.zeros_like(q1)
         for i in xrange(len(batch)):
@@ -194,13 +194,12 @@ def load(load_path):  # [a for a in dir(obj) if not a.startswith('__') and not c
 
 
 def create_models(params, load_path=None):
-    x, z = create_layers(params)
+    x, y, z = create_layers(params)
     model = Model(input=x, output=z)
     # model.summary()
     model.compile(optimizer=params.optimizer, loss='mse')
 
-    x, z = create_layers(params)
-    target_model = Model(input=x, output=z)
+    target_model = Model(input=x, output=[y, z])
 
     if load_path is not None:
         model.load_weights(load_path)
@@ -244,7 +243,9 @@ def create_layers(params):
     else:
         assert False
 
-    return x, z
+    y_ = Lambda(lambda a: K.expand_dims(a[:, 0], dim=-1), output_shape=(1,))(y)
+
+    return x, y_, z
 
 
 

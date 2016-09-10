@@ -87,10 +87,11 @@ def train(dddpg):
         for t in range(args.max_timesteps):
 
             if test_now(i_episode):
-                q = dddpg.target_model.predict(np.array([observation]), batch_size=1)
+                v, q = dddpg.target_model.predict(np.array([observation]), batch_size=1)
             else:
                 q = dddpg.model.predict(np.array([observation]), batch_size=1)
-            action = exploration.sample(q[0])
+                v, _ = dddpg.target_model.predict(np.array([observation]), batch_size=1)
+            action = exploration.sample(q[0], value=v[0])
             if args.verbose > 0:
                 print("e:", i_episode, "e.t:", t, "action:", action, "q:", q)
 
@@ -171,7 +172,7 @@ def play(dddpg):
             if args.mode == 'play':
                 time.sleep(args.wait)
             s = np.array([observation])
-            q = dddpg.target_model.predict(s, batch_size=1)
+            v, q = dddpg.target_model.predict(s, batch_size=1)
 
             action = exploration.sample(q[0])
             if args.verbose > 0:
