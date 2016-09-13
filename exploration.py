@@ -55,7 +55,7 @@ class BoltzmannDistributed(ExplorationStrategy):
         return np.random.choice(n, p=p_vector)
 
 
-class ValueDirected(ExplorationStrategy):
+class ValueBased(ExplorationStrategy):
     def __init__(self, play):
         self.values = []
         self.val_length = 10000
@@ -78,7 +78,7 @@ class ValueDirected(ExplorationStrategy):
 
     def sample(self, q, **kwargs):
         v = kwargs.get('value')
-        delta = self.mean - v
+        delta = v - self.mean
 
         n = float(len(self.values))
         if n >= self.val_length:
@@ -93,11 +93,11 @@ class ValueDirected(ExplorationStrategy):
             self.values.append(v)
             self.mean = self.mean * n/(n+1) + v/(n+1)
 
-        # ===================================
+        p = np.clip(self.parameter + 0.5 * np.tanh(delta), 0.1, 0.9)[0]
         n = len(q)
         p_vector = np.ones(n)
-        p_vector *= (1. - self.parameter) / n
-        p_vector[np.argmax(q)] += self.parameter
+        p_vector *= (1. - p) / n
+        p_vector[np.argmax(q)] += p
         return np.random.choice(n, p=p_vector)
 
 
@@ -118,7 +118,7 @@ class EpsilonGreedySpecial(ExplorationStrategy):
         else:
             self.parameter -= 2. / args.episodes
 
-    def sample(self, q):
+    def sample(self, q, **kwargs):
         n = len(q)
         if self.parameter <= np.random.random():
             p_vector = np.ones(n)
@@ -140,7 +140,7 @@ def get_strategy(strategy, play=False):
     elif strategy == 'e_greedy':
         return EpsilonGreedySpecial(play)
     elif strategy == 'value':
-        return ValueDirected(play)
+        return ValueBased(play)
 
 
 def softmax(x, p=1.):
