@@ -5,7 +5,7 @@ if [[ $HOSTNAME == zubat* ]]; then
 fi
 cd $HOME
 
-. init_script.sh
+module add python27-modules-gcc
 cd DQN-for-autonomous-vehicles
 
-python -m scoop evolution.py
+python evolution.py
