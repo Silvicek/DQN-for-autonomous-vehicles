@@ -43,6 +43,7 @@ def evaluate(individual):
     import os
     import subprocess
     id_string = ''.join(random.choice(string.ascii_lowercase) for _ in range(5))
+    print 'starting rn ID:', id_string
     run_args = individual_to_model(individual)
     run_args += ' --verbose -1 --seed 1337 --dont_save_models --save_path models/tests/ ' +\
                 '--episodes 2041' + ' --result_id ' + id_string
