@@ -1,6 +1,6 @@
 
 from deap import base, creator, tools, algorithms
-from scoop import futures
+import multiprocessing
 import random
 import cPickle
 
@@ -64,7 +64,7 @@ creator.create("Individual", list, fitness=creator.FitnessMax)
 
 toolbox = base.Toolbox()
 
-toolbox.register('map', futures.map)  # multiple CPU support
+toolbox.register('map', multiprocessing.Pool().map)  # multiple CPU support
 
 toolbox.register('attr_init', random.randint, 0, 99)
 toolbox.register('individual', tools.initRepeat, creator.Individual,
