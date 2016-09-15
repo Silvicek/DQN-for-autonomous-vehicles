@@ -65,7 +65,7 @@ creator.create("Individual", list, fitness=creator.FitnessMax)
 
 toolbox = base.Toolbox()
 
-toolbox.register('map', multiprocessing.Pool().map)  # multiple CPU support
+toolbox.register('map', multiprocessing.Pool(processes=10).map)  # multiple CPU support
 
 toolbox.register('attr_init', random.randint, 0, 99)
 toolbox.register('individual', tools.initRepeat, creator.Individual,
