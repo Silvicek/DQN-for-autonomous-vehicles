@@ -1,12 +1,14 @@
-from keras.models import Model, Sequential
-from keras.layers import Input, Dense, Lambda, LSTM, GRU, TimeDistributed, Merge
-from keras.layers.normalization import BatchNormalization
-from keras import initializations
-from keras import backend as K
 import cPickle
 import os
+
 import numpy as np
-from ddpg.sumtree import SumTree
+from keras import backend as K
+from keras import initializations
+from keras.layers import Input, Dense, Lambda, GRU, TimeDistributed
+from keras.layers.normalization import BatchNormalization
+from keras.models import Model
+
+from sumtree import SumTree
 
 
 class TrainingParameters:
