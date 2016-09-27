@@ -1,3 +1,6 @@
+"""
+A brute-force approach to parameter search. See evolution.py for a cooler one.
+"""
 script_preface = """!/bin/bash
 export HOME=/storage/ostrava1/home/stanksil
 if [[ $HOSTNAME == zubat* ]]; then

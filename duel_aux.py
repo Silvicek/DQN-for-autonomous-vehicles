@@ -1,3 +1,7 @@
+"""
+Auxiliary functions are stored here.
+"""
+
 
 class ReplayHolder:
     """Container used in replay memory"""

@@ -1,10 +1,16 @@
-
+"""
+Runs evolutionary parameter search for the DDDQN nets.
+Change parameters at the beginning or end of this script.
+The script prints and saves the best individuals in an integer form,
+use individual_to_model to recover the model.
+"""
 from deap import base, creator, tools, algorithms
 import multiprocessing
 import random
 import cPickle
 
 
+# Add or remove options, keep the format. Then add to the args variable.
 hidden_size = ('--hidden_size', ['[20,20]', '[50,50]'])
 memory_steps = ('--memory_steps', [0, 1, 3, 5])
 activation = ('--activation', ['tanh', 'relu'])
@@ -123,6 +129,8 @@ if __name__ == '__main__':
     toolbox.register("population", tools.initRepeat, list, toolbox.individual)
 
     hof = tools.HallOfFame(maxsize=5)
+
+    # Change the population size and mutation/combination probabilities here.
     population, logbook = algorithms.eaSimple(toolbox.population(n=20), toolbox, halloffame=hof,
                                               cxpb=0.5, mutpb=0.2, ngen=10, verbose=True)
 

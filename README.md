@@ -9,6 +9,9 @@ The autonomous vehicle task is present at my [gym fork](https://github.com/Silvi
 ### Usage:
 Run `duel.py` with an array of different arguments, see the script for more info.
 
+An example run:
+    `python duel.py ACar-v0 --memory_steps 0 --save_path models/tests/ --episodes 2000 --advantage max --hidden_size [50,50]`
+
 If you want to perform an evolution parameter search, run `evolution.py`.
 
 ### Requirements

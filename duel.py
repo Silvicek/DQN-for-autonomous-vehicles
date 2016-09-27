@@ -1,3 +1,4 @@
+"""Uses the DDDQN algorithm to train a neural model."""
 import argparse
 import gym
 from gym.spaces import Box, Discrete
@@ -35,13 +36,14 @@ parser.add_argument('--exploration_strategy', choices=['semi_uniform', 'e_greedy
 # ========== MODEL PARAMETERS
 parser.add_argument('--activation', choices=['tanh', 'relu'], default='tanh')
 parser.add_argument('--advantage', choices=['naive', 'max', 'avg'], default='naive')
-parser.add_argument('--memory_steps', type=int, default=0)
+parser.add_argument('--memory_steps', type=int, default=0,
+                    help='Do you want the state-action history to be part of the current state? How many steps?')
 parser.add_argument('--rnn_steps', type=int, default=5)
 parser.add_argument('--rnn', action='store_true', default=False)
 parser.add_argument('--hidden_size', default='[20,20]')
 
 # ========== OTHER PARAMETERS
-parser.add_argument('environment')
+parser.add_argument('environment', help='The gym environment, for autonomous vehicles, use ACar-v0')
 parser.add_argument('--verbose', type=int, default=0)
 parser.add_argument('--display', action='store_true', default=True)
 parser.add_argument('--no_display', dest='display', action='store_false')
@@ -49,7 +51,11 @@ parser.add_argument('--gym_record')
 parser.add_argument('--wait', type=float, default=.015)
 parser.add_argument('--seed', type=int, default=1337)
 parser.add_argument('--save_path', type=str, default='models')
-parser.add_argument('--mode', choices=['train', 'play', 'vtrain', 'test'], default='train')
+parser.add_argument('--mode', choices=['train', 'play', 'vtrain', 'test'], default='train',
+                    help='''train: begin training, you should specify where to save the learned models(--save_path). \n
+                            vtrain: training with visuals (for ACar, otherwise use --train --display).\n
+                            test: test on a learned model, requires --load_path .\n
+                            play: visual test (for ACar, otherwise use --test --display).''')
 parser.add_argument('--load_path')
 parser.add_argument('--result_id')
 
