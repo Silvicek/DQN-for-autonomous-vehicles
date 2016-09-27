@@ -1,3 +1,7 @@
+"""
+Multiple exploration techniques are stored here.
+"""
+
 import numpy as np
 
 
@@ -56,6 +60,10 @@ class BoltzmannDistributed(ExplorationStrategy):
 
 
 class EpsilonGreedySpecial(ExplorationStrategy):
+    """
+    Epsilon greedy with a twist - when choosing random actions,
+    repeating the same action has a probability boost.
+    """
     def __init__(self, play):
         self.starting_parameter_train = 0.1
         self.starting_parameter_play = 0.9

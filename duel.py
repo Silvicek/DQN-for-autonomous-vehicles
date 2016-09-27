@@ -41,8 +41,6 @@ parser.add_argument('--rnn', action='store_true', default=False)
 parser.add_argument('--hidden_size', default='[20,20]')
 
 # ========== OTHER PARAMETERS
-# parser.add_argument('--environment', type=str, default='ACar-v0')
-# parser.add_argument('--environment', type=str, default='CartPole-v0')
 parser.add_argument('environment')
 parser.add_argument('--verbose', type=int, default=0)
 parser.add_argument('--display', action='store_true', default=True)
@@ -228,7 +226,8 @@ def reset_environment():
 if __name__ == '__main__':
     np.random.seed(args.seed)
     env = gym.make(args.environment)
-    env.configure(args)
+    if 'ACar' in args.environment:
+        env.configure(args)
     args.observation_space_shape = env.observation_space.shape
     args.action_space_size = env.action_space.n
 

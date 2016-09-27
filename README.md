@@ -1,3 +1,18 @@
 # DQN-for-autonomous-vehicles
 
-see wiki
+This project uses Deep Q-networks for solving an 'Autonomous vehicles' task.
+The main algorithm: [Dueling Network Architectures for Deep Reinforcement Learning](http://arxiv.org/abs/1511.06581)
+It's also possible to run with [Prioritized Experience Replay](https://arxiv.org/abs/1511.05952)
+
+The autonomous vehicle task is present at my [gym fork](https://github.com/Silvicek/gym/tree/target), although the algorithm can be used in any gym environment.
+
+### Usage:
+Run `duel.py` with an array of different arguments, see the script for more info.
+
+If you want to perform an evolution parameter search, run `evolution.py`.
+
+### Requirements
+* numpy
+* keras
+* OpenAI gym
+* DEAP (for evolution parameter search)
