@@ -23,7 +23,7 @@ class SemiUniformDistributed(ExplorationStrategy):
         if self.parameter >= self.ending_parameter:
             pass
         else:
-            self.parameter += 2. / args.episodes
+            self.parameter += (self.ending_parameter-self.starting_parameter_train)*3./2. / args.episodes
 
     def sample(self, q, **kwargs):
         n = len(q)
@@ -35,9 +35,9 @@ class SemiUniformDistributed(ExplorationStrategy):
 
 class BoltzmannDistributed(ExplorationStrategy):
     def __init__(self, play):
-        self.starting_parameter_train = 2.
-        self.starting_parameter_play = 0.1
-        self.ending_parameter = 0.1
+        self.starting_parameter_train = 10.
+        self.starting_parameter_play = 2.
+        self.ending_parameter = 2.
         if play:
             self.parameter = self.starting_parameter_play
         else:
@@ -47,7 +47,7 @@ class BoltzmannDistributed(ExplorationStrategy):
         if self.parameter >= self.ending_parameter:
             pass
         else:
-            self.parameter += 2. / args.episodes
+            self.parameter -= (self.ending_parameter-self.starting_parameter_train)*3./2. / args.episodes
 
     def sample(self, q, **kwargs):
         n = len(q)
@@ -55,57 +55,11 @@ class BoltzmannDistributed(ExplorationStrategy):
         return np.random.choice(n, p=p_vector)
 
 
-class ValueBased(ExplorationStrategy):
-    def __init__(self, play):
-        self.values = []
-        self.val_length = 10000
-        self.ix = 0
-        self.mean = 0.
-
-        self.starting_parameter_train = 0.3
-        self.starting_parameter_play = 0.9
-        self.ending_parameter = 0.9
-        if play:
-            self.parameter = self.starting_parameter_play
-        else:
-            self.parameter = self.starting_parameter_train
-
-    def update(self, args):
-        if self.parameter >= self.ending_parameter:
-            pass
-        else:
-            self.parameter += 2. / args.episodes
-
-    def sample(self, q, **kwargs):
-        v = kwargs.get('value')
-        delta = v - self.mean
-
-        n = float(len(self.values))
-        if n >= self.val_length:
-            self.mean = self.mean + v/n - self.values[self.ix]/n
-            self.values[self.ix] = v
-            if self.ix == self.val_length-1:
-                self.ix = 0
-                print 'mean=', self.mean
-            else:
-                self.ix += 1
-        else:
-            self.values.append(v)
-            self.mean = self.mean * n/(n+1) + v/(n+1)
-
-        p = np.clip(self.parameter + 0.5 * np.tanh(delta), 0.1, 0.9)[0]
-        n = len(q)
-        p_vector = np.ones(n)
-        p_vector *= (1. - p) / n
-        p_vector[np.argmax(q)] += p
-        return np.random.choice(n, p=p_vector)
-
-
 class EpsilonGreedySpecial(ExplorationStrategy):
     def __init__(self, play):
-        self.starting_parameter_train = 1.
-        self.starting_parameter_play = 0.1
-        self.ending_parameter = 0.1
+        self.starting_parameter_train = 0.1
+        self.starting_parameter_play = 0.9
+        self.ending_parameter = 0.9
         self.last_action = 0
         if play:
             self.parameter = self.starting_parameter_play
@@ -113,10 +67,11 @@ class EpsilonGreedySpecial(ExplorationStrategy):
             self.parameter = self.starting_parameter_train
 
     def update(self, args):
-        if self.parameter <= self.ending_parameter:
+        print self.parameter
+        if self.parameter >= self.ending_parameter:
             pass
         else:
-            self.parameter -= 2. / args.episodes
+            self.parameter += (self.ending_parameter-self.starting_parameter_train)*3./2. / args.episodes
 
     def sample(self, q, **kwargs):
         n = len(q)
@@ -125,10 +80,9 @@ class EpsilonGreedySpecial(ExplorationStrategy):
             p_vector *= 0.5 / n
             p_vector[self.last_action] += 0.5
             action = np.random.choice(n, p=p_vector)
-            self.last_action = action
         else:
             action = np.argmax(q)
-            self.last_action = action
+        self.last_action = action
         return action
 
 
@@ -139,8 +93,6 @@ def get_strategy(strategy, play=False):
         return BoltzmannDistributed(play)
     elif strategy == 'e_greedy':
         return EpsilonGreedySpecial(play)
-    elif strategy == 'value':
-        return ValueBased(play)
 
 
 def softmax(x, p=1.):

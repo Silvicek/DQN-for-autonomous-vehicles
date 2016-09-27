@@ -28,15 +28,15 @@ parser.add_argument('--max_timesteps', type=int, default=1500)
 parser.add_argument('--prioritize', action="store_true", default=False)
 parser.add_argument('--update_tree_interval', type=int, default=100000)
 
-parser.add_argument('--exploration_params', type=float, default=.1)
+# parser.add_argument('--exploration_params', type=float, default=.1)
 parser.add_argument('--exploration_strategy', choices=['semi_uniform', 'e_greedy',
-                                                       'boltzmann', 'value'], default='semi_uniform')
+                                                       'boltzmann'], default='semi_uniform')
 
 # ========== MODEL PARAMETERS
 parser.add_argument('--activation', choices=['tanh', 'relu'], default='tanh')
 parser.add_argument('--advantage', choices=['naive', 'max', 'avg'], default='naive')
-parser.add_argument('--memory_steps', type=int, default=3)
-parser.add_argument('--rnn_steps', type=int, default=10)
+parser.add_argument('--memory_steps', type=int, default=0)
+parser.add_argument('--rnn_steps', type=int, default=5)
 parser.add_argument('--rnn', action='store_true', default=False)
 parser.add_argument('--hidden_size', default='[20,20]')
 
@@ -87,11 +87,10 @@ def train(dddpg):
         for t in range(args.max_timesteps):
 
             if test_now(i_episode):
-                v, q = dddpg.target_model.predict(np.array([observation]), batch_size=1)
+                q = dddpg.target_model.predict(np.array([observation]), batch_size=1)
             else:
                 q = dddpg.model.predict(np.array([observation]), batch_size=1)
-                v, _ = dddpg.target_model.predict(np.array([observation]), batch_size=1)
-            action = exploration.sample(q[0], value=v[0])
+            action = exploration.sample(q[0])
             if args.verbose > 0:
                 print("e:", i_episode, "e.t:", t, "action:", action, "q:", q)
 
@@ -159,7 +158,7 @@ def play(dddpg):
                           video_callable=lambda count: count % 1 == 0)
     total_reward = 0
     timestep = 0
-    exploration = get_strategy(args.exploration_strategy)
+    exploration = get_strategy(args.exploration_strategy, play=True)
     stuck = 0.
     successful = 0.
     for i_episode in range(args.episodes):
@@ -172,7 +171,7 @@ def play(dddpg):
             if args.mode == 'play':
                 time.sleep(args.wait)
             s = np.array([observation])
-            v, q = dddpg.target_model.predict(s, batch_size=1)
+            q = dddpg.target_model.predict(s, batch_size=1)
 
             action = exploration.sample(q[0])
             if args.verbose > 0:
