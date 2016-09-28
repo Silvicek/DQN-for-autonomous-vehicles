@@ -200,13 +200,15 @@ def play(dddpg):
         if env.success:
             print bcolors.OKGREEN + episode_print + bcolors.ENDC
             successful += 1.
+            if episode_reward < 0:
+                stuck += 1.
         else:
             print episode_print
-            stuck += 1.
+
         total_reward += episode_reward
 
     print("Average reward per episode {}".format(total_reward / args.episodes))
-    print("{}% success,  {}% stuck".format(100*successful / args.episodes, 100*stuck / args.episodes))
+    print("{}% success,  {}% with contact".format(100*successful / args.episodes, 100*stuck / args.episodes))
 
 
 
