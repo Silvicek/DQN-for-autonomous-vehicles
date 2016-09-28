@@ -40,7 +40,10 @@ parser.add_argument('--memory_steps', type=int, default=0,
                     help='Do you want the state-action history to be part of the current state? How many steps?')
 parser.add_argument('--rnn_steps', type=int, default=5)
 parser.add_argument('--rnn', action='store_true', default=False)
-parser.add_argument('--hidden_size', default='[20,20]')
+parser.add_argument('--hidden_size', default='[20,20]',
+                    help='Input the size of the network in a form of a list.\n'
+                         'Example: --hidden_size [30,20] \n'
+                         'This produces a network with two hidden layers of sizes 30 and 20. Don\'t use whitespace!')
 
 # ========== OTHER PARAMETERS
 parser.add_argument('environment', help='The gym environment, for autonomous vehicles, use ACar-v0')
@@ -188,19 +191,18 @@ def play(dddpg):
                 print("reward:", reward)
 
             timestep += 1
-            if done:
+            if done and info.get('success'):
                 break
 
         episode_print = "Episode {} finished after {} timesteps, episode reward {}".format(i_episode + 1, t + 1,
                                                                                            episode_reward)
-        if episode_reward < -130:
-            stuck += 1.
 
-        if episode_reward > 0:
+        if env.success:
             print bcolors.OKGREEN + episode_print + bcolors.ENDC
             successful += 1.
         else:
             print episode_print
+            stuck += 1.
         total_reward += episode_reward
 
     print("Average reward per episode {}".format(total_reward / args.episodes))
